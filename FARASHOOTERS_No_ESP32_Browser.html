@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FARASHOOTERS</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #050814;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    overflow-x: hidden;
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+  }
+  #app {
+    width: min(720px, 100%);
+    text-align: center;
+  }
+  h1 {
+    margin: 4px 0 2px;
+    font-size: 28px;
+    letter-spacing: 3px;
+  }
+  #status {
+    min-height: 24px;
+    margin: 4px 0 8px;
+    font-size: 14px;
+    color: #9ee7ff;
+  }
+  #screenWrap {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  canvas {
+    width: min(640px, 100%);
+    height: auto;
+    aspect-ratio: 4 / 3;
+    background: #02040b;
+    border: 2px solid #4b6380;
+    border-radius: 8px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    touch-action: none;
+  }
+  .row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  button {
+    border: 1px solid #60748c;
+    border-radius: 10px;
+    background: #172235;
+    color: #fff;
+    padding: 12px 18px;
+    font-size: 16px;
+    min-width: 100px;
+    touch-action: manipulation;
+  }
+  button:active { transform: scale(.97); background: #263752; }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .controls button {
+    min-width: 0;
+    font-size: 22px;
+    padding: 16px 8px;
+  }
+  #log {
+    margin-top: 10px;
+    text-align: left;
+    background: #02040b;
+    border: 1px solid #28374a;
+    border-radius: 8px;
+    padding: 8px;
+    height: 90px;
+    overflow: auto;
+    font: 12px monospace;
+    white-space: pre-wrap;
+  }
+  .hint {
+    font-size: 12px;
+    opacity: .75;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>FARASHOOTERS</h1>
+  <div id="status">Not connected</div>
+
+  <div id="screenWrap">
+    <canvas id="game" width="320" height="240"></canvas>
+  </div>
+
+  <div class="row">
+    <button id="connect">CONNECT ARDUINO</button>
+    <button id="disconnect">DISCONNECT</button>
+  </div>
+
+  <div class="controls">
+    <button id="left">◀</button>
+    <button id="shoot">●</button>
+    <button id="right">▶</button>
+  </div>
+
+  <div class="hint">
+    Physical buttons D2/D3/D4 continue to work. Touch controls are optional.
+  </div>
+
+  <div id="log">Waiting for Arduino...</div>
+</div>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+
+let port = null;
+let reader = null;
+let writer = null;
+let readLoopRunning = false;
+let buffer = "";
+let state = null;
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function log(text) {
+  logEl.textContent = text + "\n" + logEl.textContent;
+  const lines = logEl.textContent.split("\n");
+  if (lines.length > 12) logEl.textContent = lines.slice(0, 12).join("\n");
+}
+
+function supported() {
+  return "serial" in navigator;
+}
+
+async function connectArduino() {
+  if (!supported()) {
+    setStatus("Web Serial is not available.");
+    log("Open this page in WebSerial Browser on Android, or a browser with Web Serial support.");
+    return;
+  }
+
+  try {
+    setStatus("Choose the Arduino...");
+    // No USB filter: this is important for UNO clones using CH340/CH341.
+    port = await navigator.serial.requestPort();
+
+    await port.open({
+      baudRate: 115200,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "none"
+    });
+
+    setStatus("Connected to Arduino");
+    log("Serial opened at 115200 baud.");
+    readLoop();
+  } catch (err) {
+    setStatus("Connection failed");
+    log("ERROR: " + err.message);
+    console.error(err);
+  }
+}
+
+async function disconnectArduino() {
+  try {
+    if (reader) {
+      await reader.cancel();
+      reader.releaseLock();
+      reader = null;
+    }
+  } catch (_) {}
+
+  try {
+    if (writer) {
+      writer.releaseLock();
+      writer = null;
+    }
+  } catch (_) {}
+
+  try {
+    if (port) {
+      await port.close();
+    }
+  } catch (_) {}
+
+  port = null;
+  setStatus("Disconnected");
+  log("Serial disconnected.");
+}
+
+async function readLoop() {
+  if (!port || !port.readable || readLoopRunning) return;
+
+  readLoopRunning = true;
+  const decoder = new TextDecoder();
+
+  try {
+    reader = port.readable.getReader();
+
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+
+      buffer += decoder.decode(result.value, { stream: true });
+
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const text = line.trim();
+        if (!text) continue;
+
+        try {
+          const data = JSON.parse(text);
+          handleState(data);
+        } catch (_) {
+          // Ignore startup/debug lines that aren't JSON.
+        }
+      }
+    }
+  } catch (err) {
+    log("READ ERROR: " + err.message);
+  } finally {
+    if (reader) {
+      try { reader.releaseLock(); } catch (_) {}
+      reader = null;
+    }
+    readLoopRunning = false;
+  }
+}
+
+function handleState(data) {
+  if (data.connection === "FARASHOOTERS_READY") {
+    setStatus("FARASHOOTERS READY");
+    log("Arduino detected.");
+    return;
+  }
+
+  if (typeof data.playerX !== "undefined") {
+    state = data;
+    setStatus(
+      "Connected • Score " + data.score +
+      " • Lives " + data.lives
+    );
+  }
+}
+
+async function sendCommand(command) {
+  if (!port || !port.writable) {
+    setStatus("Connect the Arduino first.");
+    return;
+  }
+
+  try {
+    writer = port.writable.getWriter();
+    await writer.write(new TextEncoder().encode(command + "\n"));
+    writer.releaseLock();
+    writer = null;
+  } catch (err) {
+    log("WRITE ERROR: " + err.message);
+    try {
+      if (writer) writer.releaseLock();
+    } catch (_) {}
+    writer = null;
+  }
+}
+
+function commandForLeft() {
+  if (state && state.menu) return "MENU_LEFT";
+  return "LEFT";
+}
+
+function commandForRight() {
+  if (state && state.menu) return "MENU_RIGHT";
+  return "RIGHT";
+}
+
+function startHold(button, commandFunction) {
+  let timer = null;
+
+  const down = (e) => {
+    e.preventDefault();
+    commandFunction();
+    timer = setInterval(commandFunction, 70);
+  };
+
+  const up = (e) => {
+    e.preventDefault();
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  button.addEventListener("pointerdown", down);
+  button.addEventListener("pointerup", up);
+  button.addEventListener("pointercancel", up);
+  button.addEventListener("pointerleave", up);
+}
+
+startHold(document.getElementById("left"), () => sendCommand(commandForLeft()));
+startHold(document.getElementById("right"), () => sendCommand(commandForRight()));
+
+document.getElementById("shoot").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  sendCommand("SHOOT");
+});
+
+document.getElementById("connect").addEventListener("click", connectArduino);
+document.getElementById("disconnect").addEventListener("click", disconnectArduino);
+
+// Keyboard support when used on a computer.
+document.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  if (e.key === "ArrowLeft") sendCommand(commandForLeft());
+  if (e.key === "ArrowRight") sendCommand(commandForRight());
+  if (e.key === " " || e.key === "Enter") sendCommand("SHOOT");
+});
+
+function clearScreen() {
+  ctx.fillStyle = "#02040b";
+  ctx.fillRect(0, 0, 320, 240);
+
+  // deterministic star field
+  ctx.fillStyle = "#24364d";
+  for (let i = 0; i < 45; i++) {
+    const x = (i * 73) % 320;
+    const y = (i * 47) % 240;
+    ctx.fillRect(x, y, 1, 1);
+  }
+}
+
+function text(text, x, y, size = 12, align = "left") {
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `${size}px monospace`;
+  ctx.textAlign = align;
+  ctx.fillText(text, x, y);
+}
+
+function drawPlayer(x, y) {
+  ctx.fillStyle = "#70e8ff";
+
+  ctx.beginPath();
+  ctx.moveTo(x + 8, y);
+  ctx.lineTo(x + 16, y + 12);
+  ctx.lineTo(x + 11, y + 10);
+  ctx.lineTo(x + 8, y + 12);
+  ctx.lineTo(x + 5, y + 10);
+  ctx.lineTo(x, y + 12);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x + 7, y + 4, 2, 4);
+}
+
+function drawEnemy(x, y) {
+  ctx.fillStyle = "#ff647c";
+
+  ctx.fillRect(x + 4, y, 12, 3);
+  ctx.fillRect(x + 2, y + 3, 16, 8);
+  ctx.fillRect(x, y + 6, 4, 5);
+  ctx.fillRect(x + 16, y + 6, 4, 5);
+  ctx.fillRect(x + 5, y + 11, 3, 4);
+  ctx.fillRect(x + 12, y + 11, 3, 4);
+
+  ctx.fillStyle = "#050814";
+  ctx.fillRect(x + 5, y + 5, 3, 3);
+  ctx.fillRect(x + 12, y + 5, 3, 3);
+}
+
+function drawBullet(x, y) {
+  ctx.fillStyle = "#fff28a";
+  ctx.fillRect(x - 1, y - 5, 2, 7);
+}
+
+function drawBoss(x, y, health, maxHealth) {
+  ctx.fillStyle = "#a875ff";
+  ctx.fillRect(x + 10, y, 40, 5);
+  ctx.fillRect(x + 4, y + 5, 52, 22);
+  ctx.fillRect(x, y + 10, 8, 15);
+  ctx.fillRect(x + 52, y + 10, 8, 15);
+  ctx.fillRect(x + 15, y + 27, 8, 8);
+  ctx.fillRect(x + 37, y + 27, 8, 8);
+
+  ctx.fillStyle = "#080a14";
+  ctx.fillRect(x + 15, y + 10, 7, 7);
+  ctx.fillRect(x + 38, y + 10, 7, 7);
+
+  const barW = 60;
+  const hp = Math.max(0, Math.min(1, health / maxHealth));
+  ctx.fillStyle = "#252a3a";
+  ctx.fillRect(x, y - 9, barW, 5);
+  ctx.fillStyle = "#ff6b7a";
+  ctx.fillRect(x, y - 9, barW * hp, 5);
+}
+
+function drawHUD(s) {
+  text("SCORE " + s.score, 8, 14, 11);
+  text("LIVES " + s.lives, 160, 14, 11, "center");
+  text("STAGE " + s.stage, 312, 14, 11, "right");
+
+  if (!s.bossActive && s.killed !== undefined && s.needed !== undefined) {
+    text(
+      "ENEMIES " + s.killed + "/" + s.needed,
+      160, 229, 10, "center"
+    );
+  }
+}
+
+function overlay(title, subtitle) {
+  ctx.fillStyle = "rgba(0,0,0,.72)";
+  ctx.fillRect(0, 0, 320, 240);
+
+  text(title, 160, 90, 24, "center");
+  text(subtitle, 160, 120, 12, "center");
+}
+
+function drawMenu(s) {
+  clearScreen();
+
+  text("FARASHOOTERS", 160, 52, 22, "center");
+  text("ARDUINO EDITION", 160, 70, 10, "center");
+
+  const startY = 110;
+  const options = ["START GAME", "CONTROLS"];
+
+  for (let i = 0; i < options.length; i++) {
+    const selected = s.menuOption === i;
+
+    ctx.fillStyle = selected ? "#203b59" : "#0c1320";
+    ctx.fillRect(75, startY + i * 34 - 17, 170, 26);
+
+    if (selected) {
+      ctx.strokeStyle = "#70e8ff";
+      ctx.strokeRect(75, startY + i * 34 - 17, 170, 26);
+    }
+
+    text(
+      (selected ? "> " : "  ") + options[i],
+      160,
+      startY + i * 34,
+      12,
+      "center"
+    );
+  }
+
+  text("D2/D3 = MOVE   D4 = SHOOT", 160, 190, 9, "center");
+  text("Touch controls are also available", 160, 205, 9, "center");
+}
+
+function drawGame(s) {
+  clearScreen();
+  drawHUD(s);
+
+  for (const e of (s.enemies || [])) {
+    drawEnemy(e.x, e.y);
+  }
+
+  for (const b of (s.bullets || [])) {
+    drawBullet(b.x, b.y);
+  }
+
+  if (s.bossActive) {
+    drawBoss(s.bossX, s.bossY, s.bossHealth, s.bossMaxHealth);
+  }
+
+  drawPlayer(s.playerX, s.playerY ?? 210);
+
+  if (s.gameOver) {
+    overlay("GAME OVER", "Press SHOOT to restart");
+  } else if (s.gameWon) {
+    overlay("YOU WIN!", "Press SHOOT to return to menu");
+  }
+}
+
+function draw() {
+  if (!state) {
+    clearScreen();
+    text("FARASHOOTERS", 160, 80, 22, "center");
+    text("CONNECT ARDUINO", 160, 112, 13, "center");
+    text("USB serial: 115200 baud", 160, 132, 10, "center");
+    requestAnimationFrame(draw);
+    return;
+  }
+
+  if (state.menu) {
+    drawMenu(state);
+  } else {
+    drawGame(state);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
