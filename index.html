@@ -67,12 +67,14 @@ const game = {
   playerX: W / 2 - 8,
   playerY: H - 28,
   playerSpeed: 3,
+  lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
   enemyDir: 1,
   enemyMoveTimer: 0,
   enemyDrop: 7,
   enemyShootTimer: 0,
+  nextEnemyShootInterval: 1000,
   stageClearTimer: 0,
   invulnerableUntil: 0,
   message: "",
@@ -80,7 +82,8 @@ const game = {
   lastTime: performance.now(),
   boss: null,
   bossMoveTimer: 0,
-  bossShootTimer: 0
+  bossShootTimer: 0,
+  nextBossShootInterval: 600
 };
 
 function setStatus(t){ statusEl.textContent = t; }
@@ -156,6 +159,7 @@ function resetGame(){
   game.lives=3;
   game.stage=1;
   game.playerX=W/2-8;
+  game.lastPlayerShootTime=0;
   game.bullets=[];
   game.invulnerableUntil=0;
   game.message="STAGE 1";
@@ -186,6 +190,7 @@ function spawnStage(){
   game.enemyMoveTimer=0;
   game.enemyShootTimer=0;
   game.stageClearTimer=0;
+  game.nextEnemyShootInterval = 800 + Math.random() * 600;
 
   const rows = Math.min(2 + Math.floor((game.stage-1)/2), 4);
   const cols = Math.min(6 + Math.floor((game.stage-1)/3), 8);
@@ -228,9 +233,11 @@ function spawnBoss(){
     dir:1,
     speed:1.15*speed,
     spiralAngle: 0,
-    attackPattern: 0
+    attackPattern: 0,
+    patternTimer: 0
   };
 
+  game.nextBossShootInterval = 400 + Math.random() * 300;
   game.message="STAGE " + game.stage + " • BOSS";
   game.messageUntil=performance.now()+1800;
 }
@@ -248,6 +255,10 @@ function shoot(){
   }
   if(game.screen!=="playing") return;
 
+  const now = performance.now();
+  // 0.5 Second (500ms) Cooldown Interval
+  if(now - game.lastPlayerShootTime < 500) return;
+
   if(game.bullets.filter(b=>b.owner==="player").length < 4){
     game.bullets.push({
       x:game.playerX+8,
@@ -256,6 +267,7 @@ function shoot(){
       vy:-5,
       owner:"player"
     });
+    game.lastPlayerShootTime = now;
   }
 }
 
@@ -277,6 +289,11 @@ function enemyShoot(){
       owner:"enemy"
     });
   }
+
+  // Set randomized variable interval for next enemy burst
+  const difficulty = getSpeedMultiplier();
+  const baseDelay = Math.max(250, 1200 / difficulty);
+  game.nextEnemyShootInterval = baseDelay + (Math.random() * 400);
 }
 
 function bossShoot(){
@@ -286,50 +303,69 @@ function bossShoot(){
   const speed=getSpeedMultiplier();
   const centerX = b.x + b.w / 2;
   const centerY = b.y + b.h / 2;
+  let baseDelay = 400;
 
-  // Alternate between Ring Spiral (Asgore-style) and Target Sweep
-  if(b.attackPattern % 2 === 0){
-    // Spiral Ring Attack (fires bullets radiating in a rotating starburst)
-    const bulletCount = 8;
-    const baseAngle = b.spiralAngle;
-    const bulletSpeed = 1.8 * speed;
+  // Integrated Asgore-Inspired Multi-Pattern Sequence
+  switch(b.attackPattern % 3){
+    case 0: // Rotating Dual Spiral Wave
+      const spiralBullets = 6;
+      for(let i = 0; i < spiralBullets; i++){
+        const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
+        game.bullets.push({
+          x: centerX,
+          y: centerY,
+          vx: Math.cos(angle) * (1.8 * speed),
+          vy: Math.sin(angle) * (1.8 * speed),
+          owner: "boss"
+        });
+      }
+      b.spiralAngle += 0.28;
+      baseDelay = 220 / speed; // Rapid burst pattern
+      break;
 
-    for(let i = 0; i < bulletCount; i++){
-      const angle = baseAngle + (i * (Math.PI * 2 / bulletCount));
-      game.bullets.push({
-        x: centerX,
-        y: centerY,
-        vx: Math.cos(angle) * bulletSpeed,
-        vy: Math.sin(angle) * bulletSpeed,
-        owner: "boss"
-      });
-    }
-    // Rotate angle offset for next burst to form a continuous spiral pattern
-    b.spiralAngle += 0.35;
-  } else {
-    // Targeted Fan Attack towards Player
-    const px = game.playerX + 8;
-    const py = game.playerY + 6;
-    const angleToPlayer = Math.atan2(py - centerY, px - centerX);
-    const bulletSpeed = 2.2 * speed;
-    const spreadAngles = [-0.3, -0.15, 0, 0.15, 0.3];
+    case 1: // Targeted Triple-Flame Fan
+      const px = game.playerX + 8;
+      const py = game.playerY + 6;
+      const angleToPlayer = Math.atan2(py - centerY, px - centerX);
+      const spread = [-0.25, 0, 0.25];
 
-    for(let offset of spreadAngles){
-      const angle = angleToPlayer + offset;
-      game.bullets.push({
-        x: centerX,
-        y: centerY,
-        vx: Math.cos(angle) * bulletSpeed,
-        vy: Math.sin(angle) * bulletSpeed,
-        owner: "boss"
-      });
-    }
+      for(let offset of spread){
+        const angle = angleToPlayer + offset;
+        game.bullets.push({
+          x: centerX,
+          y: centerY,
+          vx: Math.cos(angle) * (2.4 * speed),
+          vy: Math.sin(angle) * (2.4 * speed),
+          owner: "boss"
+        });
+      }
+      baseDelay = 650 / speed; // Slower, direct targeted strikes
+      break;
+
+    case 2: // Expanding Ring Wall Attack
+      const ringBullets = 12;
+      for(let i = 0; i < ringBullets; i++){
+        const angle = i * (Math.PI * 2 / ringBullets);
+        game.bullets.push({
+          x: centerX,
+          y: centerY,
+          vx: Math.cos(angle) * (1.5 * speed),
+          vy: Math.sin(angle) * (1.5 * speed),
+          owner: "boss"
+        });
+      }
+      baseDelay = 950 / speed; // Big burst ring delay
+      break;
   }
 
-  // Switch attack mode periodically
-  if(Math.random() < 0.25) {
+  b.patternTimer++;
+  if(b.patternTimer > 8){
+    b.patternTimer = 0;
     b.attackPattern++;
   }
+
+  // Randomize upcoming shot timing based on active pattern delay
+  game.nextBossShootInterval = baseDelay + (Math.random() * 200);
 }
 
 function hit(a,b){
@@ -374,9 +410,9 @@ function update(dt){
       b.dir=-1;
     }
 
-    const bossFireDelay=Math.max(280, 600/difficulty);
-    if(game.bossShootTimer>=bossFireDelay){
-      game.bossShootTimer=0;
+    game.bossShootTimer += dt;
+    if(game.bossShootTimer >= game.nextBossShootInterval){
+      game.bossShootTimer = 0;
       bossShoot();
     }
 
@@ -457,9 +493,8 @@ function update(dt){
     }
   }
 
-  const enemyFireDelay=Math.max(380,1400/difficulty);
-  if(game.enemyShootTimer>=enemyFireDelay){
-    game.enemyShootTimer=0;
+  if(game.enemyShootTimer >= game.nextEnemyShootInterval){
+    game.enemyShootTimer = 0;
     enemyShoot();
   }
 
