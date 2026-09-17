@@ -81,7 +81,7 @@ const game = {
   boss: null,
   bossMoveTimer: 0,
   bossShootTimer: 0,
-  nextBossShootInterval: 600
+  nextBossShootInterval: 1000
 };
 
 function setStatus(t){ statusEl.textContent = t; }
@@ -261,7 +261,7 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 100) return;
+  if(now - game.lastPlayerShootTime < 50) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 4){
     game.bullets.push({
