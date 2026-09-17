@@ -59,7 +59,87 @@ let buffer = "";
 
 const W = canvas.width, H = canvas.height;
 
-// Input state tracking for smooth delta-time movement
+// --- WEB AUDIO API SYNTHESIZER FOR ASGORE OST ---
+let audioCtx = null;
+let musicInterval = null;
+let noteIndex = 0;
+
+const noteFreqs = {
+  'C3': 130.81, 'D3': 146.83, 'Eb3': 155.56, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00, 'Ab3': 207.65, 'Bb3': 233.08,
+  'C4': 261.63, 'D4': 293.66, 'Eb4': 311.13, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00, 'Ab4': 415.30, 'Bb4': 466.16,
+  'C5': 523.25, 'D5': 587.33, 'Eb5': 622.25, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99, 'Ab5': 830.61, 'Bb5': 932.33,
+  'REST': 0
+};
+
+// Simplified synth arrangement of ASGORE motif
+const asgoreMelody = [
+  { m: 'C5', b: 'C3' }, { m: 'G4', b: 'C3' }, { m: 'Eb4', b: 'G3' }, { m: 'G4', b: 'C3' },
+  { m: 'C5', b: 'C3' }, { m: 'D5', b: 'C3' }, { m: 'Eb5', b: 'G3' }, { m: 'F5', b: 'C3' },
+  { m: 'G5', b: 'Ab3' }, { m: 'Eb5', b: 'Ab3' }, { m: 'C5', b: 'Eb4' }, { m: 'Eb5', b: 'Ab3' },
+  { m: 'G5', b: 'Ab3' }, { m: 'Ab5', b: 'Ab3' }, { m: 'G5', b: 'Eb4' }, { m: 'F5', b: 'Ab3' },
+  { m: 'Eb5', b: 'Bb3' }, { m: 'Bb4', b: 'Bb3' }, { m: 'G4', b: 'D4' }, { m: 'Bb4', b: 'Bb3' },
+  { m: 'Eb5', b: 'Bb3' }, { m: 'F5', b: 'Bb3' }, { m: 'G5', b: 'D4' }, { m: 'Eb5', b: 'Bb3' },
+  { m: 'F5', b: 'F3' }, { m: 'C5', b: 'F3' }, { m: 'Ab4', b: 'C4' }, { m: 'C5', b: 'F3' },
+  { m: 'F5', b: 'G3' }, { m: 'G5', b: 'G3' }, { m: 'Ab5', b: 'D4' }, { m: 'G5', b: 'G3' }
+];
+
+function initAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if(audioCtx.state === 'suspended'){
+    audioCtx.resume();
+  }
+}
+
+function playSynthNote(freq, type, duration, volume){
+  if(freq <= 0 || !audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playBossMusic(){
+  initAudio();
+  stopBossMusic();
+  noteIndex = 0;
+  
+  // Plays at ~148 BPM pulse
+  musicInterval = setInterval(() => {
+    const current = asgoreMelody[noteIndex];
+    
+    // Melody synth line (Square Wave for Chiptune feel)
+    if(current.m && noteFreqs[current.m]){
+      playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.08);
+    }
+    // Bassline synth (Sawtooth Wave)
+    if(current.b && noteFreqs[current.b]){
+      playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.12);
+    }
+
+    noteIndex = (noteIndex + 1) % asgoreMelody.length;
+  }, 160);
+}
+
+function stopBossMusic(){
+  if(musicInterval){
+    clearInterval(musicInterval);
+    musicInterval = null;
+  }
+}
+
+// Input state tracking
 const inputs = {
   left: false,
   right: false
@@ -72,7 +152,7 @@ const game = {
   stage: 1,
   playerX: W / 2 - 8,
   playerY: H - 28,
-  playerSpeed: 0.16, // Pixels per millisecond speed
+  playerSpeed: 0.16,
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
@@ -98,6 +178,7 @@ function log(t){
 function supported(){ return "serial" in navigator; }
 
 async function connectArduino(){
+  initAudio();
   if(!supported()){
     setStatus("Web Serial is not available.");
     log("Use a browser/device that supports Web Serial.");
@@ -157,6 +238,7 @@ async function readLoop(){
 }
 
 function resetGame(){
+  stopBossMusic();
   game.screen="playing";
   game.score=0;
   game.lives=3;
@@ -181,6 +263,7 @@ function spawnCurrentStage(){
   if(game.stage % 5 === 0){
     spawnBoss();
   }else{
+    stopBossMusic();
     spawnStage();
   }
 }
@@ -249,9 +332,12 @@ function spawnBoss(){
   game.nextBossShootInterval = 400 + Math.random() * 300;
   game.message="STAGE " + game.stage + " • BOSS (+1 LIFE)";
   game.messageUntil=performance.now()+1800;
+
+  playBossMusic();
 }
 
 function shoot(){
+  initAudio();
   if(game.screen==="menu" || game.screen==="gameover" || game.screen==="won"){
     resetGame();
     return;
@@ -259,9 +345,9 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 500) return;
+  if(now - game.lastPlayerShootTime < 100) return;
 
-  if(game.bullets.filter(b=>b.owner==="player").length < 4){
+  if(game.bullets.filter(b=>b.owner==="player").length < 10){
     game.bullets.push({
       x:game.playerX+8,
       y:game.playerY,
@@ -276,7 +362,6 @@ function shoot(){
 function updateEnemies(dt){
   const speed = getSpeedMultiplier();
 
-  // Smooth Enemy Movement
   const alive = game.enemies.filter(e => e.alive);
   if(alive.length){
     let minX = Math.min(...alive.map(e => e.x));
@@ -324,7 +409,6 @@ function bossShoot(){
 
   switch(b.attackPattern % 3){
     case 0:
-      // Spiral Attack (Velocity reduced to 0.0825 - 0.75x)
       const spiralBullets = 6;
       for(let i = 0; i < spiralBullets; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
@@ -341,7 +425,6 @@ function bossShoot(){
       break;
 
     case 1:
-      // 2-Bullet Spray Attack (Velocity reduced to 0.1125 - 0.75x)
       const px = game.playerX + 8;
       const py = game.playerY + 6;
       const angleToPlayer = Math.atan2(py - centerY, px - centerX);
@@ -361,7 +444,6 @@ function bossShoot(){
       break;
 
     case 2:
-      // Ring Attack (Velocity reduced to 0.0675 - 0.75x)
       const ringBullets = 12;
       for(let i = 0; i < ringBullets; i++){
         const angle = i * (Math.PI * 2 / ringBullets);
@@ -404,6 +486,7 @@ function loseLife(){
   if(game.lives<=0){
     game.lives=0;
     game.screen="gameover";
+    stopBossMusic();
   }
 }
 
@@ -412,7 +495,6 @@ function update(dt){
 
   const difficulty=getSpeedMultiplier();
 
-  // Smooth Player Movement
   if(inputs.left) game.playerX -= game.playerSpeed * dt;
   if(inputs.right) game.playerX += game.playerSpeed * dt;
   game.playerX = Math.max(0, Math.min(W - 16, game.playerX));
@@ -468,6 +550,7 @@ function update(dt){
         if(b.hp<=0){
           game.boss=null;
           game.bullets=[];
+          stopBossMusic();
           game.stageClearTimer=performance.now()+1200;
           game.message="BOSS DEFEATED!";
           game.messageUntil=performance.now()+1100;
@@ -483,7 +566,7 @@ function update(dt){
     if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
       game.stageClearTimer=0;
       game.stage++;
-      game.lives++; // Restores 1 life upon completing stage
+      game.lives++;
       spawnCurrentStage();
     }
 
@@ -549,7 +632,7 @@ function update(dt){
   if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
     game.stageClearTimer=0;
     game.stage++;
-    game.lives++; // Restores 1 life upon completing stage
+    game.lives++;
     spawnCurrentStage();
   }
 }
@@ -685,7 +768,7 @@ function loop(now){
 
 function setupTouch(btnId, key){
   const btn = document.getElementById(btnId);
-  btn.addEventListener("pointerdown", e => { e.preventDefault(); inputs[key] = true; });
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); initAudio(); inputs[key] = true; });
   btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
   btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
   btn.addEventListener("pointerleave", e => { e.preventDefault(); inputs[key] = false; });
@@ -698,6 +781,7 @@ document.getElementById("connect").addEventListener("click", connectArduino);
 document.getElementById("disconnect").addEventListener("click", disconnectArduino);
 
 document.addEventListener("keydown", e => {
+  initAudio();
   if(e.key === "ArrowLeft"){ e.preventDefault(); inputs.left = true; }
   if(e.key === "ArrowRight"){ e.preventDefault(); inputs.right = true; }
   if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
