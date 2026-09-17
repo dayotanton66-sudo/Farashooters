@@ -59,6 +59,12 @@ let buffer = "";
 
 const W = canvas.width, H = canvas.height;
 
+// Input State tracking for smooth movement
+const inputs = {
+  left: false,
+  right: false
+};
+
 const game = {
   screen: "menu",
   score: 0,
@@ -66,13 +72,11 @@ const game = {
   stage: 1,
   playerX: W / 2 - 8,
   playerY: H - 28,
-  playerSpeed: 3,
+  playerSpeed: 0.16, // Pixels per millisecond speed for smooth movement
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
   enemyDir: 1,
-  enemyMoveTimer: 0,
-  enemyDrop: 7,
   stageClearTimer: 0,
   invulnerableUntil: 0,
   message: "",
@@ -81,7 +85,7 @@ const game = {
   boss: null,
   bossMoveTimer: 0,
   bossShootTimer: 0,
-  nextBossShootInterval: 1000
+  nextBossShootInterval: 600
 };
 
 function setStatus(t){ statusEl.textContent = t; }
@@ -137,8 +141,9 @@ async function readLoop(){
       buffer = lines.pop() || "";
       for(const raw of lines){
         const cmd = raw.trim().toUpperCase();
-        if(cmd==="LEFT") movePlayer(-1);
-        else if(cmd==="RIGHT") movePlayer(1);
+        if(cmd==="LEFT"){ inputs.left = true; inputs.right = false; }
+        else if(cmd==="RIGHT"){ inputs.right = true; inputs.left = false; }
+        else if(cmd==="RELEASE"){ inputs.left = false; inputs.right = false; }
         else if(cmd==="SHOOT") shoot();
       }
     }
@@ -192,7 +197,6 @@ function spawnStage(){
   game.bullets=[];
   game.boss=null;
   game.enemyDir=1;
-  game.enemyMoveTimer=0;
   game.stageClearTimer=0;
 
   const rows = Math.min(2 + Math.floor((game.stage-1)/2), 4);
@@ -236,7 +240,7 @@ function spawnBoss(){
     hp:hp,
     maxHp:hp,
     dir:1,
-    speed:1.15*speed,
+    speed:0.075 * speed,
     spiralAngle: 0,
     attackPattern: 0,
     patternTimer: 0
@@ -247,12 +251,6 @@ function spawnBoss(){
   game.messageUntil=performance.now()+1800;
 }
 
-function movePlayer(dir){
-  if(game.screen!=="playing") return;
-  game.playerX += dir * game.playerSpeed * 5;
-  game.playerX = Math.max(0,Math.min(W-16,game.playerX));
-}
-
 function shoot(){
   if(game.screen==="menu" || game.screen==="gameover" || game.screen==="won"){
     resetGame();
@@ -261,14 +259,14 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 50) return;
+  if(now - game.lastPlayerShootTime < 500) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 4){
     game.bullets.push({
       x:game.playerX+8,
       y:game.playerY,
       vx:0,
-      vy:-5,
+      vy:-0.32,
       owner:"player"
     });
     game.lastPlayerShootTime = now;
@@ -277,6 +275,24 @@ function shoot(){
 
 function updateEnemies(dt){
   const speed = getSpeedMultiplier();
+
+  // Smooth Enemy Grid Movement (Sine Wave Floating + Continuous Lateral Shift)
+  const alive = game.enemies.filter(e => e.alive);
+  if(alive.length){
+    let minX = Math.min(...alive.map(e => e.x));
+    let maxX = Math.max(...alive.map(e => e.x));
+    const step = 0.035 * speed * dt * game.enemyDir;
+
+    if(maxX >= W - 24 && game.enemyDir > 0){
+      game.enemyDir = -1;
+      alive.forEach(e => e.y += 6);
+    } else if(minX <= 4 && game.enemyDir < 0){
+      game.enemyDir = 1;
+      alive.forEach(e => e.y += 6);
+    } else {
+      alive.forEach(e => e.x += step);
+    }
+  }
 
   for(const e of game.enemies){
     if(!e.alive) continue;
@@ -290,7 +306,7 @@ function updateEnemies(dt){
         x: e.x + 10,
         y: e.y + 14,
         vx: 0,
-        vy: 2.2 * speed,
+        vy: 0.14 * speed,
         owner: "enemy"
       });
     }
@@ -308,14 +324,14 @@ function bossShoot(){
 
   switch(b.attackPattern % 3){
     case 0:
-      const spiralBullets = 5;
+      const spiralBullets = 6;
       for(let i = 0; i < spiralBullets; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
         game.bullets.push({
           x: centerX,
           y: centerY,
-          vx: Math.cos(angle) * (1.8 * speed),
-          vy: Math.sin(angle) * (1.8 * speed),
+          vx: Math.cos(angle) * (0.11 * speed),
+          vy: Math.sin(angle) * (0.11 * speed),
           owner: "boss"
         });
       }
@@ -334,8 +350,8 @@ function bossShoot(){
         game.bullets.push({
           x: centerX,
           y: centerY,
-          vx: Math.cos(angle) * (2.4 * speed),
-          vy: Math.sin(angle) * (2.4 * speed),
+          vx: Math.cos(angle) * (0.15 * speed),
+          vy: Math.sin(angle) * (0.15 * speed),
           owner: "boss"
         });
       }
@@ -349,8 +365,8 @@ function bossShoot(){
         game.bullets.push({
           x: centerX,
           y: centerY,
-          vx: Math.cos(angle) * (1.5 * speed),
-          vy: Math.sin(angle) * (1.5 * speed),
+          vx: Math.cos(angle) * (0.09 * speed),
+          vy: Math.sin(angle) * (0.09 * speed),
           owner: "boss"
         });
       }
@@ -391,15 +407,17 @@ function loseLife(){
 function update(dt){
   if(game.screen!=="playing") return;
 
-  const speedScale=dt/16.67;
   const difficulty=getSpeedMultiplier();
 
-  game.enemyMoveTimer += dt;
+  // Smooth Continuous Player Movement
+  if(inputs.left) game.playerX -= game.playerSpeed * dt;
+  if(inputs.right) game.playerX += game.playerSpeed * dt;
+  game.playerX = Math.max(0, Math.min(W - 16, game.playerX));
 
   if(game.boss){
     const b=game.boss;
 
-    b.x += b.dir * b.speed * speedScale;
+    b.x += b.dir * b.speed * dt;
     if(b.x <= 4){
       b.x=4;
       b.dir=1;
@@ -421,8 +439,8 @@ function update(dt){
     }
 
     for(const bullet of game.bullets){
-      bullet.x += (bullet.vx || 0) * speedScale;
-      bullet.y += bullet.vy * speedScale;
+      bullet.x += (bullet.vx || 0) * dt;
+      bullet.y += bullet.vy * dt;
     }
     game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
 
@@ -468,34 +486,11 @@ function update(dt){
     return;
   }
 
-  const moveDelay=Math.max(180,500/difficulty);
-
-  if(game.enemyMoveTimer>=moveDelay){
-    game.enemyMoveTimer=0;
-    const alive=game.enemies.filter(e=>e.alive);
-
-    if(alive.length){
-      let minX=Math.min(...alive.map(e=>e.x));
-      let maxX=Math.max(...alive.map(e=>e.x));
-      const horizontalStep=6*difficulty;
-
-      if(maxX>=W-24 && game.enemyDir>0){
-        game.enemyDir=-1;
-        alive.forEach(e=>e.y+=game.enemyDrop*difficulty);
-      }else if(minX<=4 && game.enemyDir<0){
-        game.enemyDir=1;
-        alive.forEach(e=>e.y+=game.enemyDrop*difficulty);
-      }else{
-        alive.forEach(e=>e.x += game.enemyDir*horizontalStep);
-      }
-    }
-  }
-
   updateEnemies(dt);
 
   for(const b of game.bullets){
-    b.x += (b.vx || 0) * speedScale;
-    b.y += b.vy * speedScale;
+    b.x += (b.vx || 0) * dt;
+    b.y += b.vy * dt;
   }
   game.bullets=game.bullets.filter(b=>b.x > -15 && b.x < W+15 && b.y > -15 && b.y < H+15);
 
@@ -683,33 +678,29 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 
-function startHold(button,fn){
-  let timer=null;
-  const down=e=>{
-    e.preventDefault();
-    fn();
-    timer=setInterval(fn,70);
-  };
-  const up=e=>{
-    e.preventDefault();
-    if(timer!==null){clearInterval(timer);timer=null;}
-  };
-  button.addEventListener("pointerdown",down);
-  button.addEventListener("pointerup",up);
-  button.addEventListener("pointercancel",up);
-  button.addEventListener("pointerleave",up);
+function setupTouch(btnId, key){
+  const btn = document.getElementById(btnId);
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); inputs[key] = true; });
+  btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
+  btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
+  btn.addEventListener("pointerleave", e => { e.preventDefault(); inputs[key] = false; });
 }
 
-startHold(document.getElementById("left"),()=>movePlayer(-1));
-startHold(document.getElementById("right"),()=>movePlayer(1));
-document.getElementById("shoot").addEventListener("pointerdown",e=>{e.preventDefault();shoot();});
-document.getElementById("connect").addEventListener("click",connectArduino);
-document.getElementById("disconnect").addEventListener("click",disconnectArduino);
+setupTouch("left", "left");
+setupTouch("right", "right");
+document.getElementById("shoot").addEventListener("pointerdown", e => { e.preventDefault(); shoot(); });
+document.getElementById("connect").addEventListener("click", connectArduino);
+document.getElementById("disconnect").addEventListener("click", disconnectArduino);
 
-document.addEventListener("keydown",e=>{
-  if(e.key==="ArrowLeft"){e.preventDefault();movePlayer(-1);}
-  if(e.key==="ArrowRight"){e.preventDefault();movePlayer(1);}
-  if(e.key===" " || e.key==="Enter"){e.preventDefault();shoot();}
+document.addEventListener("keydown", e => {
+  if(e.key === "ArrowLeft"){ e.preventDefault(); inputs.left = true; }
+  if(e.key === "ArrowRight"){ e.preventDefault(); inputs.right = true; }
+  if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
+});
+
+document.addEventListener("keyup", e => {
+  if(e.key === "ArrowLeft"){ inputs.left = false; }
+  if(e.key === "ArrowRight"){ inputs.right = false; }
 });
 
 requestAnimationFrame(loop);
