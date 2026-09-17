@@ -261,7 +261,7 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 500) return;
+  if(now - game.lastPlayerShootTime < 100) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 4){
     game.bullets.push({
@@ -308,7 +308,7 @@ function bossShoot(){
 
   switch(b.attackPattern % 3){
     case 0:
-      const spiralBullets = 6;
+      const spiralBullets = 5;
       for(let i = 0; i < spiralBullets; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
         game.bullets.push({
