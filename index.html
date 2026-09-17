@@ -1,15 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FARASHOOTERS</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;min-height:100%;background:#050814;color:#fff;font-family:Arial,sans-serif;overflow-x:hidden}
+body{display:flex;justify-content:center;padding:12px}
+#app{width:min(720px,100%);text-align:center}
+h1{margin:4px 0 2px;font-size:28px;letter-spacing:3px}
+#status{min-height:24px;margin:4px 0 8px;font-size:14px;color:#9ee7ff}
+#screenWrap{width:100%;display:flex;justify-content:center}
+canvas{width:min(640px,100%);height:auto;aspect-ratio:4/3;background:#02040b;border:2px solid #4b6380;border-radius:8px;image-rendering:pixelated;touch-action:none}
+.row{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+button{border:1px solid #60748c;border-radius:10px;background:#172235;color:#fff;padding:12px 18px;font-size:16px;min-width:100px;touch-action:manipulation}
+button:active{transform:scale(.97);background:#263752}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.controls button{min-width:0;font-size:22px;padding:16px 8px}
+#log{margin-top:10px;text-align:left;background:#02040b;border:1px solid #28374a;border-radius:8px;padding:8px;height:90px;overflow:auto;font:12px monospace;white-space:pre-wrap}
+.hint{font-size:12px;opacity:.75;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="app">
+<h1>FARASHOOTERS</h1>
+<div id="status">Not connected</div>
+
+<div id="screenWrap"><canvas id="game" width="320" height="240"></canvas></div>
+
+<div class="row">
+<button id="connect">CONNECT ARDUINO</button>
+<button id="disconnect">DISCONNECT</button>
+</div>
+
+<div class="controls">
+<button id="left">◀</button>
+<button id="shoot">●</button>
+<button id="right">▶</button>
+</div>
+
+<div class="hint">D2 = LEFT • D3 = RIGHT • D4 = SHOOT • Touch controls also work</div>
+<div id="log">Waiting for Arduino...</div>
+</div>
+
+<script>
+"use strict";
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+
+let port = null;
+let reader = null;
+let readLoopRunning = false;
+let buffer = "";
+
+const W = canvas.width, H = canvas.height;
+
+// Input state tracking for smooth delta-time movement
+const inputs = {
+  left: false,
+  right: false
+};
+
+const game = {
+  screen: "menu",
+  score: 0,
+  lives: 3,
+  stage: 1,
+  playerX: W / 2 - 8,
+  playerY: H - 28,
+  playerSpeed: 0.16, // Pixels per millisecond speed
+  lastPlayerShootTime: 0,
+  bullets: [],
+  enemies: [],
+  enemyDir: 1,
+  stageClearTimer: 0,
+  invulnerableUntil: 0,
+  message: "",
+  messageUntil: 0,
+  lastTime: performance.now(),
+  boss: null,
+  bossMoveTimer: 0,
+  bossShootTimer: 0,
+  nextBossShootInterval: 600
+};
+
+function setStatus(t){ statusEl.textContent = t; }
+function log(t){
+  logEl.textContent = t + "\n" + logEl.textContent;
+  const lines = logEl.textContent.split("\n");
+  if(lines.length > 12) logEl.textContent = lines.slice(0,12).join("\n");
+}
+
+function supported(){ return "serial" in navigator; }
+
+async function connectArduino(){
+  if(!supported()){
+    setStatus("Web Serial is not available.");
+    log("Use a browser/device that supports Web Serial.");
+    return;
+  }
+  try{
+    setStatus("Choose the Arduino...");
+    port = await navigator.serial.requestPort();
+    await port.open({baudRate:115200,dataBits:8,stopBits:1,parity:"none",flowControl:"none"});
+    setStatus("Connected • Stage 1 • Lives 3");
+    log("Serial opened at 115200 baud.");
+    resetGame();
+    readLoop();
+  }catch(err){
+    setStatus("Connection failed");
+    log("ERROR: " + err.message);
+  }
+}
+
+async function disconnectArduino(){
+  try{
+    if(reader){ await reader.cancel(); reader.releaseLock(); reader=null; }
+  }catch(_){}
+  try{ if(port) await port.close(); }catch(_){}
+  port=null;
+  setStatus("Disconnected");
+  log("Serial disconnected.");
+}
+
+async function readLoop(){
+  if(!port || !port.readable || readLoopRunning) return;
+  readLoopRunning = true;
+  const decoder = new TextDecoder();
+  try{
+    reader = port.readable.getReader();
+    while(true){
+      const result = await reader.read();
+      if(result.done) break;
+      buffer += decoder.decode(result.value,{stream:true});
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for(const raw of lines){
+        const cmd = raw.trim().toUpperCase();
+        if(cmd==="LEFT"){ inputs.left = true; inputs.right = false; }
+        else if(cmd==="RIGHT"){ inputs.right = true; inputs.left = false; }
+        else if(cmd==="RELEASE"){ inputs.left = false; inputs.right = false; }
+        else if(cmd==="SHOOT") shoot();
+      }
+    }
+  }catch(err){
+    if(port) log("READ ERROR: " + err.message);
+  }finally{
+    try{ if(reader) reader.releaseLock(); }catch(_){}
+    reader=null;
+    readLoopRunning=false;
+  }
+}
+
+function resetGame(){
+  game.screen="playing";
+  game.score=0;
+  game.lives=3;
+  game.stage=1;
+  game.playerX=W/2-8;
+  game.lastPlayerShootTime=0;
+  game.bullets=[];
+  game.invulnerableUntil=0;
+  game.message="STAGE 1";
+  game.messageUntil=performance.now()+1200;
+  game.boss=null;
+  game.bossMoveTimer=0;
+  game.bossShootTimer=0;
+  spawnCurrentStage();
+}
+
+function getSpeedMultiplier(){
+  return Math.pow(1.03, game.stage - 1);
+}
+
+function spawnCurrentStage(){
+  if(game.stage % 5 === 0){
+    spawnBoss();
+  }else{
+    spawnStage();
+  }
+}
+
+function getRandomEnemyInterval(){
+  const difficulty = getSpeedMultiplier();
+  const minInterval = Math.max(800, 2500 / difficulty);
+  const maxInterval = Math.max(2500, 7000 / difficulty);
+  return minInterval + Math.random() * (maxInterval - minInterval);
+}
+
+function spawnStage(){
+  game.enemies=[];
+  game.bullets=[];
+  game.boss=null;
+  game.enemyDir=1;
+  game.stageClearTimer=0;
+
+  const rows = Math.min(2 + Math.floor((game.stage-1)/2), 4);
+  const cols = Math.min(6 + Math.floor((game.stage-1)/3), 8);
+  const gapX=32, gapY=23;
+  const startX=(W-(cols-1)*gapX)/2-10;
+  const startY=35;
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      game.enemies.push({
+        x:startX+c*gapX,
+        y:startY+r*gapY,
+        w:20,h:15,
+        alive:true,
+        shootTimer: Math.random() * 1000,
+        nextShootInterval: getRandomEnemyInterval()
+      });
+    }
+  }
+
+  game.message = "STAGE " + game.stage + " • +1 LIFE";
+  game.messageUntil = performance.now()+1100;
+}
+
+function spawnBoss(){
+  game.enemies=[];
+  game.bullets=[];
+  game.stageClearTimer=0;
+  game.bossMoveTimer=0;
+  game.bossShootTimer=0;
+
+  const speed = getSpeedMultiplier();
+  const hp = 30 + (game.stage * 4);
+
+  game.boss={
+    x:W/2-32,
+    y:35,
+    w:64,
+    h:34,
+    hp:hp,
+    maxHp:hp,
+    dir:1,
+    speed:0.075 * speed,
+    spiralAngle: 0,
+    attackPattern: 0,
+    patternTimer: 0
+  };
+
+  game.nextBossShootInterval = 400 + Math.random() * 300;
+  game.message="STAGE " + game.stage + " • BOSS (+1 LIFE)";
+  game.messageUntil=performance.now()+1800;
+}
+
+function shoot(){
+  if(game.screen==="menu" || game.screen==="gameover" || game.screen==="won"){
+    resetGame();
+    return;
+  }
+  if(game.screen!=="playing") return;
+
+  const now = performance.now();
+  if(now - game.lastPlayerShootTime < 500) return;
+
+  if(game.bullets.filter(b=>b.owner==="player").length < 4){
+    game.bullets.push({
+      x:game.playerX+8,
+      y:game.playerY,
+      vx:0,
+      vy:-0.32,
+      owner:"player"
+    });
+    game.lastPlayerShootTime = now;
+  }
+}
+
+function updateEnemies(dt){
+  const speed = getSpeedMultiplier();
+
+  // Smooth Enemy Movement
+  const alive = game.enemies.filter(e => e.alive);
+  if(alive.length){
+    let minX = Math.min(...alive.map(e => e.x));
+    let maxX = Math.max(...alive.map(e => e.x));
+    const step = 0.035 * speed * dt * game.enemyDir;
+
+    if(maxX >= W - 24 && game.enemyDir > 0){
+      game.enemyDir = -1;
+      alive.forEach(e => e.y += 6);
+    } else if(minX <= 4 && game.enemyDir < 0){
+      game.enemyDir = 1;
+      alive.forEach(e => e.y += 6);
+    } else {
+      alive.forEach(e => e.x += step);
+    }
+  }
+
+  for(const e of game.enemies){
+    if(!e.alive) continue;
+
+    e.shootTimer += dt;
+    if(e.shootTimer >= e.nextShootInterval){
+      e.shootTimer = 0;
+      e.nextShootInterval = getRandomEnemyInterval();
+
+      game.bullets.push({
+        x: e.x + 10,
+        y: e.y + 14,
+        vx: 0,
+        vy: 0.14 * speed,
+        owner: "enemy"
+      });
+    }
+  }
+}
+
 function bossShoot(){
   if(!game.boss) return;
 
-  const b = game.boss;
-  const speed = getSpeedMultiplier();
+  const b=game.boss;
+  const speed=getSpeedMultiplier();
   const centerX = b.x + b.w / 2;
   const centerY = b.y + b.h / 2;
   let baseDelay = 400;
 
   switch(b.attackPattern % 3){
     case 0:
-      // Spiral Attack (Velocity reduced from 0.11 to 0.0825)
+      // Spiral Attack (Velocity reduced to 0.0825 - 0.75x)
       const spiralBullets = 6;
       for(let i = 0; i < spiralBullets; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
@@ -26,7 +341,7 @@ function bossShoot(){
       break;
 
     case 1:
-      // 2-Bullet Spray Attack (Velocity reduced from 0.15 to 0.1125)
+      // 2-Bullet Spray Attack (Velocity reduced to 0.1125 - 0.75x)
       const px = game.playerX + 8;
       const py = game.playerY + 6;
       const angleToPlayer = Math.atan2(py - centerY, px - centerX);
@@ -46,7 +361,7 @@ function bossShoot(){
       break;
 
     case 2:
-      // Ring Attack (Velocity reduced from 0.09 to 0.0675)
+      // Ring Attack (Velocity reduced to 0.0675 - 0.75x)
       const ringBullets = 12;
       for(let i = 0; i < ringBullets; i++){
         const angle = i * (Math.PI * 2 / ringBullets);
@@ -70,3 +385,330 @@ function bossShoot(){
 
   game.nextBossShootInterval = baseDelay + (Math.random() * 200);
 }
+
+function hit(a,b){
+  return a.x < b.x+b.w && a.x+a.w > b.x &&
+         a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function loseLife(){
+  const now=performance.now();
+  if(now < game.invulnerableUntil) return;
+  game.lives--;
+  game.invulnerableUntil=now+1200;
+  game.playerX=W/2-8;
+  game.bullets=game.bullets.filter(b=>b.owner==="player");
+  game.message="HIT! LIVES: " + game.lives;
+  game.messageUntil=now+900;
+
+  if(game.lives<=0){
+    game.lives=0;
+    game.screen="gameover";
+  }
+}
+
+function update(dt){
+  if(game.screen!=="playing") return;
+
+  const difficulty=getSpeedMultiplier();
+
+  // Smooth Player Movement
+  if(inputs.left) game.playerX -= game.playerSpeed * dt;
+  if(inputs.right) game.playerX += game.playerSpeed * dt;
+  game.playerX = Math.max(0, Math.min(W - 16, game.playerX));
+
+  if(game.boss){
+    const b=game.boss;
+
+    b.x += b.dir * b.speed * dt;
+    if(b.x <= 4){
+      b.x=4;
+      b.dir=1;
+    }else if(b.x+b.w >= W-4){
+      b.x=W-4-b.w;
+      b.dir=-1;
+    }
+
+    game.bossShootTimer += dt;
+    if(game.bossShootTimer >= game.nextBossShootInterval){
+      game.bossShootTimer = 0;
+      bossShoot();
+    }
+
+    game.bossMoveTimer += dt;
+    if(game.bossMoveTimer>=1800/difficulty){
+      game.bossMoveTimer=0;
+      if(b.y < 78) b.y += 4;
+    }
+
+    for(const bullet of game.bullets){
+      bullet.x += (bullet.vx || 0) * dt;
+      bullet.y += bullet.vy * dt;
+    }
+    game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
+
+    for(const bullet of game.bullets){
+      if(bullet.owner!=="boss") continue;
+      const br={x:bullet.x-2,y:bullet.y-2,w:4,h:4};
+      const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+      if(hit(br,pr)){
+        bullet.y=H+30;
+        loseLife();
+      }
+    }
+
+    for(const bullet of game.bullets){
+      if(bullet.owner!=="player") continue;
+      const br={x:bullet.x-1,y:bullet.y-5,w:2,h:7};
+      if(hit(br,b)){
+        bullet.y=-30;
+        b.hp--;
+        game.score+=25;
+
+        if(b.hp<=0){
+          game.boss=null;
+          game.bullets=[];
+          game.stageClearTimer=performance.now()+1200;
+          game.message="BOSS DEFEATED!";
+          game.messageUntil=performance.now()+1100;
+        }
+      }
+    }
+
+    if(game.boss){
+      const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+      if(hit(pr,b)) loseLife();
+    }
+
+    if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
+      game.stageClearTimer=0;
+      game.stage++;
+      game.lives++; // Restores 1 life upon completing stage
+      spawnCurrentStage();
+    }
+
+    return;
+  }
+
+  updateEnemies(dt);
+
+  for(const b of game.bullets){
+    b.x += (b.vx || 0) * dt;
+    b.y += b.vy * dt;
+  }
+  game.bullets=game.bullets.filter(b=>b.x > -15 && b.x < W+15 && b.y > -15 && b.y < H+15);
+
+  for(const e of game.enemies){
+    if(!e.alive) continue;
+
+    if(e.y+e.h >= game.playerY){
+      e.alive=false;
+      loseLife();
+      continue;
+    }
+
+    const playerRect={x:game.playerX,y:game.playerY,w:16,h:12};
+    if(hit(playerRect,e)){
+      e.alive=false;
+      loseLife();
+    }
+  }
+
+  for(const b of game.bullets){
+    if(b.owner!=="enemy") continue;
+    const br={x:b.x-1,y:b.y-5,w:2,h:7};
+    const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+    if(hit(br,pr)){
+      b.y=H+20;
+      loseLife();
+    }
+  }
+
+  for(const b of game.bullets){
+    if(b.owner!=="player") continue;
+    const br={x:b.x-1,y:b.y-5,w:2,h:7};
+    for(const e of game.enemies){
+      if(!e.alive) continue;
+      if(hit(br,e)){
+        e.alive=false;
+        b.y=-30;
+        game.score+=10;
+        break;
+      }
+    }
+  }
+
+  game.enemies=game.enemies.filter(e=>e.alive);
+
+  if(game.enemies.length===0 && game.stageClearTimer===0){
+    game.stageClearTimer=performance.now()+1200;
+    game.message="STAGE CLEAR!";
+    game.messageUntil=performance.now()+1100;
+  }
+
+  if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
+    game.stageClearTimer=0;
+    game.stage++;
+    game.lives++; // Restores 1 life upon completing stage
+    spawnCurrentStage();
+  }
+}
+
+function clearScreen(){
+  ctx.fillStyle="#02040b";
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#24364d";
+  for(let i=0;i<45;i++){
+    const x=(i*73)%W, y=(i*47)%H;
+    ctx.fillRect(x,y,1,1);
+  }
+}
+
+function text(t,x,y,size=12,align="left"){
+  ctx.fillStyle="#fff";
+  ctx.font=`${size}px monospace`;
+  ctx.textAlign=align;
+  ctx.fillText(t,x,y);
+}
+
+function drawPlayer(){
+  const flashing=performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0;
+  if(flashing) return;
+  const x=game.playerX,y=game.playerY;
+  ctx.fillStyle="#70e8ff";
+  ctx.beginPath();
+  ctx.moveTo(x+8,y);
+  ctx.lineTo(x+16,y+12);
+  ctx.lineTo(x+11,y+10);
+  ctx.lineTo(x+8,y+12);
+  ctx.lineTo(x+5,y+10);
+  ctx.lineTo(x,y+12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle="#fff";
+  ctx.fillRect(x+7,y+4,2,4);
+}
+
+function drawEnemy(x,y){
+  ctx.fillStyle="#ff647c";
+  ctx.fillRect(x+4,y,12,3);
+  ctx.fillRect(x+2,y+3,16,8);
+  ctx.fillRect(x,y+6,4,5);
+  ctx.fillRect(x+16,y+6,4,5);
+  ctx.fillRect(x+5,y+11,3,4);
+  ctx.fillRect(x+12,y+11,3,4);
+  ctx.fillStyle="#050814";
+  ctx.fillRect(x+5,y+5,3,3);
+  ctx.fillRect(x+12,y+5,3,3);
+}
+
+function drawBullet(b){
+  if(b.owner==="boss"){
+    ctx.fillStyle="#ff8800";
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }else{
+    ctx.fillStyle=b.owner==="player" ? "#fff28a" : "#ff647c";
+    ctx.fillRect(b.x-1,b.y-5,2,7);
+  }
+}
+
+function drawBoss(b){
+  ctx.fillStyle="#b56cff";
+  ctx.fillRect(b.x+8,b.y+5,b.w-16,b.h-10);
+  ctx.fillRect(b.x+16,b.y,b.w-32,5);
+  ctx.fillRect(b.x,b.y+12,10,12);
+  ctx.fillRect(b.x+b.w-10,b.y+12,10,12);
+
+  ctx.fillStyle="#fff";
+  ctx.fillRect(b.x+17,b.y+11,8,7);
+  ctx.fillRect(b.x+b.w-25,b.y+11,8,7);
+  ctx.fillStyle="#ff405f";
+  ctx.fillRect(b.x+20,b.y+13,4,3);
+  ctx.fillRect(b.x+b.w-24,b.y+13,4,3);
+
+  ctx.fillStyle="#42152b";
+  ctx.fillRect(b.x,b.y-9,b.w,4);
+  ctx.fillStyle="#ff647c";
+  ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
+}
+
+function drawHUD(){
+  text("SCORE "+game.score,8,14,11);
+  text("LIVES "+game.lives,160,14,11,"center");
+  text("STAGE "+game.stage,312,14,11,"right");
+  if(game.boss){
+    text("BOSS HP "+game.boss.hp+"/"+game.boss.maxHp,160,229,10,"center");
+  }else{
+    text("ENEMIES "+game.enemies.length,160,229,10,"center");
+  }
+}
+
+function overlay(title,subtitle){
+  ctx.fillStyle="rgba(0,0,0,.72)";
+  ctx.fillRect(0,0,W,H);
+  text(title,160,90,24,"center");
+  text(subtitle,160,120,12,"center");
+}
+
+function draw(){
+  clearScreen();
+
+  if(game.screen==="menu"){
+    text("FARASHOOTERS",160,62,22,"center");
+    text("ARDUINO EDITION",160,80,10,"center");
+    text("PRESS SHOOT TO START",160,125,13,"center");
+    text("D2 LEFT • D3 RIGHT • D4 SHOOT",160,150,9,"center");
+  }else{
+    drawHUD();
+    for(const e of game.enemies) drawEnemy(e.x,e.y);
+    if(game.boss) drawBoss(game.boss);
+    for(const b of game.bullets) drawBullet(b);
+    drawPlayer();
+
+    if(game.messageUntil>performance.now()){
+      text(game.message,160,110,18,"center");
+    }
+    if(game.screen==="gameover") overlay("GAME OVER","Press SHOOT to restart");
+    if(game.screen==="won") overlay("YOU WIN!","Press SHOOT to return to menu");
+  }
+}
+
+function loop(now){
+  const dt=Math.min(40,now-game.lastTime);
+  game.lastTime=now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function setupTouch(btnId, key){
+  const btn = document.getElementById(btnId);
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); inputs[key] = true; });
+  btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
+  btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
+  btn.addEventListener("pointerleave", e => { e.preventDefault(); inputs[key] = false; });
+}
+
+setupTouch("left", "left");
+setupTouch("right", "right");
+document.getElementById("shoot").addEventListener("pointerdown", e => { e.preventDefault(); shoot(); });
+document.getElementById("connect").addEventListener("click", connectArduino);
+document.getElementById("disconnect").addEventListener("click", disconnectArduino);
+
+document.addEventListener("keydown", e => {
+  if(e.key === "ArrowLeft"){ e.preventDefault(); inputs.left = true; }
+  if(e.key === "ArrowRight"){ e.preventDefault(); inputs.right = true; }
+  if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
+});
+
+document.addEventListener("keyup", e => {
+  if(e.key === "ArrowLeft"){ inputs.left = false; }
+  if(e.key === "ArrowRight"){ inputs.right = false; }
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
