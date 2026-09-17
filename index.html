@@ -16,6 +16,8 @@ canvas{max-width:100%;max-height:100%;aspect-ratio:4/3;background:#02040b;border
 .row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:6px;width:100%}
 button{border:1px solid #60748c;border-radius:10px;background:#172235;color:#fff;padding:8px 14px;font-size:14px;min-width:90px;touch-action:manipulation;cursor:pointer}
 button:active{transform:scale(.97);background:#263752}
+.btn-danger{background:#3a171d;border-color:#8c3542}
+.btn-danger:active{background:#52232a}
 .controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;width:100%;max-width:640px}
 .controls button{min-width:0;font-size:20px;padding:10px 6px}
 #log{margin-top:6px;text-align:left;background:#02040b;border:1px solid #28374a;border-radius:8px;padding:6px;height:60px;overflow:auto;font:11px monospace;white-space:pre-wrap;width:100%;max-width:640px}
@@ -49,6 +51,7 @@ button:active{transform:scale(.97);background:#263752}
 <div class="row">
 <button id="connect">CONNECT</button>
 <button id="disconnect">DISCONNECT</button>
+<button id="menuBtn" class="btn-danger">MENU</button>
 <button id="fullscreenBtn">FULLSCREEN</button>
 </div>
 
@@ -58,7 +61,7 @@ button:active{transform:scale(.97);background:#263752}
 <button id="right">▶</button>
 </div>
 
-<div class="hint">D2 = LEFT • D3 = RIGHT • D4 = SHOOT • Keyboard or Touch controls work</div>
+<div class="hint">D2 = LEFT • D3 = RIGHT • D4 = SHOOT • Keyboard, Touch or ESC for Menu</div>
 <div id="log">Waiting for input...</div>
 </div>
 
@@ -70,6 +73,7 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
+const menuBtn = document.getElementById("menuBtn");
 
 let port = null, reader = null, readLoopRunning = false, buffer = "";
 const W = canvas.width, H = canvas.height;
@@ -197,7 +201,7 @@ const game = {
   boss: null,
   bossMoveTimer: 0,
   bossShootTimer: 0,
-  nextBossShootInterval: 600
+  nextBossShootInterval: 1200
 };
 
 function setStatus(t){ statusEl.textContent = t; }
@@ -254,6 +258,17 @@ async function readLoop(){
     }
   }catch(err){ if(port) log("READ ERR: "+err.message); }
   finally{ if(reader) reader.releaseLock(); reader=null; readLoopRunning=false; }
+}
+
+function returnToMenu(){
+  stopBossMusic();
+  game.screen = "menu";
+  game.bullets = [];
+  game.enemies = [];
+  game.lasers = [];
+  game.boss = null;
+  inputs.left = false;
+  inputs.right = false;
 }
 
 function resetGame(){
@@ -344,13 +359,12 @@ function spawnBoss(){
   game.bossMoveTimer=0;
   game.bossShootTimer=0;
 
-  let baseHp = 40, type = "undyne", title = "UNDYNE THE UNDYING";
+  let baseHp = 120, type = "undyne", title = "UNDYNE THE UNDYING";
 
-  if(game.stage === 10){ baseHp = 80; type = "asgore"; title = "ASGORE"; }
-  else if(game.stage === 15){ baseHp = 120; type = "sans"; title = "SANS"; }
-  else if(game.stage >= 20){ baseHp = 180; type = "asriel"; title = "ASRIEL - GOD OF HYPERDEATH"; }
+  if(game.stage === 10){ baseHp = 240; type = "asgore"; title = "ASGORE"; }
+  else if(game.stage === 15){ baseHp = 360; type = "sans"; title = "SANS"; }
+  else if(game.stage >= 20){ baseHp = 540; type = "asriel"; title = "ASRIEL - GOD OF HYPERDEATH"; }
 
-  // Dynamic Boss HP scaling based on cannons level
   let hp = Math.floor(baseHp * (1 + 0.3 * (game.cannons - 1)));
   if(game.difficultyIdx === 3) hp = Math.floor(hp * 1.3);
 
@@ -361,7 +375,7 @@ function spawnBoss(){
     isImmortal: false, immortalTimer: 0
   };
 
-  game.nextBossShootInterval = 400 * DIFFICULTIES[game.difficultyIdx].delayMult;
+  game.nextBossShootInterval = 1200 * DIFFICULTIES[game.difficultyIdx].delayMult;
   game.message="STAGE " + game.stage + " • " + title;
   game.messageUntil=performance.now()+1800;
 
@@ -409,41 +423,36 @@ function shoot(){
   }
 }
 
-// Integrated Boss Attacks + NPC Minion Spawns
 function bossShoot(){
   if(!game.boss) return;
   const b = game.boss;
   const speed = getSpeedMultiplier();
   const diff = DIFFICULTIES[game.difficultyIdx];
   const centerX = b.x + b.w / 2, centerY = b.y + b.h / 2;
-  let baseDelay = 400 * diff.delayMult;
+  let baseDelay = 1200 * diff.delayMult;
 
   if(b.type === "undyne"){
     const mode = b.attackPattern % 4;
 
     if(mode === 0){
-      // Spear Cascade
       const offsets = game.difficultyIdx >= 2 ? [-0.1, -0.05, 0, 0.05, 0.1] : [-0.06, 0, 0.06];
       for(const vx of offsets){
         game.bullets.push({ x: centerX, y: b.y + b.h, vx: vx * speed, vy: 0.25 * speed, owner: "undyne_spear" });
       }
-      baseDelay = 280 * diff.delayMult;
+      baseDelay = 800 * diff.delayMult;
     } else if(mode === 1){
-      // Targeted Spear Trap around Player
       const px = game.playerX + 5;
       for(let offset of [-28, -14, 14, 28]){
         game.bullets.push({ x: px + offset, y: 10, vx: 0, vy: 0.28 * speed, owner: "undyne_spear" });
       }
-      baseDelay = 450 * diff.delayMult;
+      baseDelay = 1350 * diff.delayMult;
     } else if(mode === 2){
-      // Spear Ring Burst
       for(let a = 0; a < 8; a++){
         const angle = (a / 8) * Math.PI * 2;
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.12 * speed, vy: Math.sin(angle) * 0.12 * speed, owner: "boss" });
       }
-      baseDelay = 380 * diff.delayMult;
+      baseDelay = 1100 * diff.delayMult;
     } else {
-      // Minion Assist: Flash Shooter Support
       if(game.enemies.length < 2){
         game.enemies.push({
           x: Math.random() * (W - 30) + 15, y: b.y + b.h + 10, w: 20, h: 15,
@@ -451,34 +460,31 @@ function bossShoot(){
           shootTimer: 0, nextShootInterval: 800
         });
       }
-      baseDelay = 500 * diff.delayMult;
+      baseDelay = 1500 * diff.delayMult;
     }
 
     b.patternTimer++;
-    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   else if(b.type === "asgore"){
     const mode = b.attackPattern % 3;
 
     if(mode === 0){
-      // Trident Wave
       const px = game.playerX + 5;
       const angle = Math.atan2(game.playerY - centerY, px - centerX);
       for(let offset of [-0.3, -0.15, 0, 0.15, 0.3]){
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle + offset) * 0.12 * speed, vy: Math.sin(angle + offset) * 0.12 * speed, owner: "boss" });
       }
-      baseDelay = 480 * diff.delayMult;
+      baseDelay = 1400 * diff.delayMult;
     } else if(mode === 1){
-      // Trident Spiral
       for(let i=0; i<12; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / 12));
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.09 * speed, vy: Math.sin(angle) * 0.09 * speed, owner: "boss" });
       }
       b.spiralAngle += 0.2;
-      baseDelay = 200 * diff.delayMult;
+      baseDelay = 600 * diff.delayMult;
     } else {
-      // Minion Assist: Tank Vanguard Shield
       if(game.enemies.length < 1){
         game.enemies.push({
           x: W / 2 - 10, y: b.y + b.h + 15, w: 20, h: 15,
@@ -486,38 +492,34 @@ function bossShoot(){
           shootTimer: 0, nextShootInterval: 1200
         });
       }
-      baseDelay = 600 * diff.delayMult;
+      baseDelay = 1800 * diff.delayMult;
     }
 
     b.patternTimer++;
-    if(b.patternTimer > 5){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 15){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   else if(b.type === "sans"){
     const mode = b.attackPattern % 4;
 
     if(mode === 0){
-      // Bone Wall with Gap
       const gapIndex = Math.floor(Math.random() * 8);
       for(let i=0; i<10; i++){
         if(i !== gapIndex){
           game.bullets.push({ x: i * 32 + 16, y: b.y + b.h, vx: 0, vy: 0.12 * speed, owner: "boss" });
         }
       }
-      baseDelay = 550 * diff.delayMult;
+      baseDelay = 1600 * diff.delayMult;
     } else if(mode === 1){
-      // Gaster Blaster Vertical Beam
-      game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 800, warning: true });
-      baseDelay = 700 * diff.delayMult;
+      game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 1200, warning: true });
+      baseDelay = 2000 * diff.delayMult;
     } else if(mode === 2){
-      // Chaos Burst
       for(let i=0; i<6; i++){
         const angle = Math.random() * Math.PI * 2;
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.15 * speed, vy: Math.sin(angle) * 0.15 * speed, owner: "boss" });
       }
-      baseDelay = 220 * diff.delayMult;
+      baseDelay = 700 * diff.delayMult;
     } else {
-      // Minion Assist: Spread Shooter Distraction
       if(game.enemies.length < 2){
         game.enemies.push({
           x: Math.random() < 0.5 ? 20 : W - 40, y: b.y + b.h + 10, w: 20, h: 15,
@@ -525,49 +527,45 @@ function bossShoot(){
           shootTimer: 0, nextShootInterval: 900
         });
       }
-      baseDelay = 500 * diff.delayMult;
+      baseDelay = 1500 * diff.delayMult;
     }
 
     b.patternTimer++;
-    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   else if(b.type === "asriel"){
     const mode = b.attackPattern % 4;
 
     if(mode === 0){
-      // Hyper Goner Radial Void Burst
       for(let i=0; i<14; i++){
         const angle = (i / 14) * Math.PI * 2;
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.11 * speed, vy: Math.sin(angle) * 0.11 * speed, owner: "boss" });
       }
-      baseDelay = 380 * diff.delayMult;
+      baseDelay = 1100 * diff.delayMult;
     } else if(mode === 1){
-      // Starfall
       for(let i = 0; i < 4; i++){
         game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: (Math.random() - 0.5) * 0.05, vy: 0.13 * speed, owner: "asriel_star" });
       }
-      baseDelay = 300 * diff.delayMult;
+      baseDelay = 900 * diff.delayMult;
     } else if(mode === 2){
-      // Dual Flank Lasers
       game.lasers.push(
-        { x: 20, y: 0, w: 25, h: H, timer: 700, warning: true },
-        { x: W - 45, y: 0, w: 25, h: H, timer: 700, warning: true }
+        { x: 20, y: 0, w: 25, h: H, timer: 1000, warning: true },
+        { x: W - 45, y: 0, w: 25, h: H, timer: 1000, warning: true }
       );
-      baseDelay = 650 * diff.delayMult;
+      baseDelay = 1900 * diff.delayMult;
     } else {
-      // Final Chaos: Double Elite Minions (Tank + Spread)
       if(game.enemies.length < 2){
         game.enemies.push(
           { x: W / 2 - 35, y: b.y + b.h + 20, w: 20, h: 15, type: "tank", hp: 4, maxHp: 4, alive: true, shootTimer: 0, nextShootInterval: 1000 },
           { x: W / 2 + 15, y: b.y + b.h + 20, w: 20, h: 15, type: "spread", hp: 1, maxHp: 1, alive: true, shootTimer: 0, nextShootInterval: 900 }
         );
       }
-      baseDelay = 750 * diff.delayMult;
+      baseDelay = 2200 * diff.delayMult;
     }
 
     b.patternTimer++;
-    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   game.nextBossShootInterval = baseDelay;
@@ -725,7 +723,6 @@ function update(dt){
 
   const pr = getPlayerHitbox();
 
-  // Enemy / Boss Bullet Collisions with Player
   for(const bullet of game.bullets){
     if(bullet.owner==="player") continue;
     let br = bullet.owner === "undyne_spear" 
@@ -735,7 +732,6 @@ function update(dt){
     if(hit(br, pr)){ loseLife(); }
   }
 
-  // Player Bullet Collisions with Enemies and Boss
   for(const bullet of game.bullets){
     if(bullet.owner!=="player") continue;
     const br={x:bullet.x-1,y:bullet.y-5,w:2,h:7};
@@ -991,6 +987,7 @@ setupTouch("right", "right");
 document.getElementById("shoot").addEventListener("pointerdown", e => { e.preventDefault(); shoot(); });
 document.getElementById("connect").addEventListener("click", connectArduino);
 document.getElementById("disconnect").addEventListener("click", disconnectArduino);
+menuBtn.addEventListener("click", returnToMenu);
 
 fullscreenBtn.addEventListener("click", async () => {
   initAudio();
@@ -1008,6 +1005,9 @@ fullscreenBtn.addEventListener("click", async () => {
 
 document.addEventListener("keydown", e => {
   initAudio();
+  if(e.key === "Escape"){
+    returnToMenu();
+  }
   if(e.key === "ArrowLeft"){ 
     e.preventDefault(); 
     if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
