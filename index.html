@@ -59,7 +59,7 @@ let buffer = "";
 
 const W = canvas.width, H = canvas.height;
 
-// --- WEB AUDIO API SYNTHESIZER FOR ASGORE OST ---
+// --- WEB AUDIO API SYNTHESIZER & SOUND EFFECTS ---
 let audioCtx = null;
 let musicInterval = null;
 let noteIndex = 0;
@@ -71,7 +71,6 @@ const noteFreqs = {
   'REST': 0
 };
 
-// Simplified synth arrangement of ASGORE motif
 const asgoreMelody = [
   { m: 'C5', b: 'C3' }, { m: 'G4', b: 'C3' }, { m: 'Eb4', b: 'G3' }, { m: 'G4', b: 'C3' },
   { m: 'C5', b: 'C3' }, { m: 'D5', b: 'C3' }, { m: 'Eb5', b: 'G3' }, { m: 'F5', b: 'C3' },
@@ -110,24 +109,71 @@ function playSynthNote(freq, type, duration, volume){
   osc.stop(audioCtx.currentTime + duration);
 }
 
+// Sound FX Generators
+const sfx = {
+  shoot(){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.08);
+  },
+  hit(){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+  },
+  damage(){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.35);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.35);
+  },
+  clear(){
+    if(!audioCtx) return;
+    playSynthNote(noteFreqs['C5'], 'square', 0.1, 0.08);
+    setTimeout(() => playSynthNote(noteFreqs['E5'], 'square', 0.1, 0.08), 80);
+    setTimeout(() => playSynthNote(noteFreqs['G5'], 'square', 0.2, 0.08), 160);
+  }
+};
+
 function playBossMusic(){
   initAudio();
   stopBossMusic();
   noteIndex = 0;
   
-  // Plays at ~148 BPM pulse
   musicInterval = setInterval(() => {
     const current = asgoreMelody[noteIndex];
-    
-    // Melody synth line (Square Wave for Chiptune feel)
     if(current.m && noteFreqs[current.m]){
-      playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.08);
+      playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.07);
     }
-    // Bassline synth (Sawtooth Wave)
     if(current.b && noteFreqs[current.b]){
-      playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.12);
+      playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.1);
     }
-
     noteIndex = (noteIndex + 1) % asgoreMelody.length;
   }, 160);
 }
@@ -140,10 +186,7 @@ function stopBossMusic(){
 }
 
 // Input state tracking
-const inputs = {
-  left: false,
-  right: false
-};
+const inputs = { left: false, right: false };
 
 const game = {
   screen: "menu",
@@ -345,7 +388,7 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 40) return;
+  if(now - game.lastPlayerShootTime < 100) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 10){
     game.bullets.push({
@@ -356,6 +399,7 @@ function shoot(){
       owner:"player"
     });
     game.lastPlayerShootTime = now;
+    sfx.shoot();
   }
 }
 
@@ -477,6 +521,7 @@ function loseLife(){
   const now=performance.now();
   if(now < game.invulnerableUntil) return;
   game.lives--;
+  sfx.damage();
   game.invulnerableUntil=now+1200;
   game.playerX=W/2-8;
   game.bullets=game.bullets.filter(b=>b.owner==="player");
@@ -546,11 +591,13 @@ function update(dt){
         bullet.y=-30;
         b.hp--;
         game.score+=25;
+        sfx.hit();
 
         if(b.hp<=0){
           game.boss=null;
           game.bullets=[];
           stopBossMusic();
+          sfx.clear();
           game.stageClearTimer=performance.now()+1200;
           game.message="BOSS DEFEATED!";
           game.messageUntil=performance.now()+1100;
@@ -616,6 +663,7 @@ function update(dt){
         e.alive=false;
         b.y=-30;
         game.score+=10;
+        sfx.hit();
         break;
       }
     }
@@ -624,6 +672,7 @@ function update(dt){
   game.enemies=game.enemies.filter(e=>e.alive);
 
   if(game.enemies.length===0 && game.stageClearTimer===0){
+    sfx.clear();
     game.stageClearTimer=performance.now()+1200;
     game.message="STAGE CLEAR!";
     game.messageUntil=performance.now()+1100;
