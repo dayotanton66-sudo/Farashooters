@@ -22,28 +22,14 @@ button:active{transform:scale(.97);background:#263752}
 .hint{font-size:11px;opacity:.75;margin-top:4px}
 
 /* Fullscreen Mobile Landscape Optimization */
-:fullscreen body, :-webkit-full-screen body {
-  padding: 0; margin: 0; background: #000;
-}
-:fullscreen #app, :-webkit-full-screen #app {
-  width: 100vw; height: 100vh; max-width: 100vw; padding: 4px 10px; justify-content: space-between;
-}
+:fullscreen body, :-webkit-full-screen body { padding: 0; margin: 0; background: #000; }
+:fullscreen #app, :-webkit-full-screen #app { width: 100vw; height: 100vh; max-width: 100vw; padding: 4px 10px; justify-content: space-between; }
 :fullscreen h1, :fullscreen #status, :fullscreen .hint, :fullscreen #log, :fullscreen .row,
-:-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen .row {
-  display: none;
-}
-:fullscreen #screenWrap, :-webkit-full-screen #screenWrap {
-  flex: 1; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; min-height: 0;
-}
-:fullscreen canvas, :-webkit-full-screen canvas {
-  height: 100%; width: auto; max-width: 100%; max-height: 100%; border-radius: 4px;
-}
-:fullscreen .controls, :-webkit-full-screen .controls {
-  margin-top: 4px; height: 50px; max-width: 100%;
-}
-:fullscreen .controls button, :-webkit-full-screen .controls button {
-  padding: 6px; font-size: 24px;
-}
+:-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen .row { display: none; }
+:fullscreen #screenWrap, :-webkit-full-screen #screenWrap { flex: 1; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; min-height: 0; }
+:fullscreen canvas, :-webkit-full-screen canvas { height: 100%; width: auto; max-width: 100%; max-height: 100%; border-radius: 4px; }
+:fullscreen .controls, :-webkit-full-screen .controls { margin-top: 4px; height: 50px; max-width: 100%; }
+:fullscreen .controls button, :-webkit-full-screen .controls button { padding: 6px; font-size: 24px; }
 
 @media (orientation: landscape) and (max-height: 500px) {
   h1, #status, .hint, #log, .row { display: none; }
@@ -85,23 +71,16 @@ const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 
-let port = null;
-let reader = null;
-let readLoopRunning = false;
-let buffer = "";
-
+let port = null, reader = null, readLoopRunning = false, buffer = "";
 const W = canvas.width, H = canvas.height;
 
-// --- WEB AUDIO SYNTHESIZER ---
-let audioCtx = null;
-let musicInterval = null;
-let noteIndex = 0;
+// --- AUDIO SYNTHESIZER ---
+let audioCtx = null, musicInterval = null, noteIndex = 0;
 
 const noteFreqs = {
   'C3': 130.81, 'D3': 146.83, 'Eb3': 155.56, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00, 'Ab3': 207.65, 'Bb3': 233.08,
   'C4': 261.63, 'D4': 293.66, 'Eb4': 311.13, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00, 'Ab4': 415.30, 'Bb4': 466.16,
-  'C5': 523.25, 'D5': 587.33, 'Eb5': 622.25, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99, 'Ab5': 830.61, 'Bb5': 932.33,
-  'REST': 0
+  'C5': 523.25, 'D5': 587.33, 'Eb5': 622.25, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99, 'Ab5': 830.61, 'Bb5': 932.33, 'REST': 0
 };
 
 const bossMelody = [
@@ -112,12 +91,8 @@ const bossMelody = [
 ];
 
 function initAudio(){
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if(audioCtx.state === 'suspended'){
-    audioCtx.resume();
-  }
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
 }
 
 function playSynthNote(freq, type, duration, volume){
@@ -137,45 +112,36 @@ function playSynthNote(freq, type, duration, volume){
 const sfx = {
   shoot(){
     if(!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
     osc.type = 'square';
     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.08);
     gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.08);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.08);
   },
   hit(){
     if(!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(160, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.1);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.1);
   },
   damage(){
     if(!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(120, audioCtx.currentTime);
     osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.35);
     gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.35);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.35);
   },
   clear(){
     if(!audioCtx) return;
@@ -186,26 +152,17 @@ const sfx = {
 };
 
 function playBossMusic(){
-  initAudio();
-  stopBossMusic();
-  noteIndex = 0;
+  initAudio(); stopBossMusic(); noteIndex = 0;
   musicInterval = setInterval(() => {
     const current = bossMelody[noteIndex];
-    if(current.m && noteFreqs[current.m]){
-      playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.07);
-    }
-    if(current.b && noteFreqs[current.b]){
-      playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.1);
-    }
+    if(current.m && noteFreqs[current.m]) playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.07);
+    if(current.b && noteFreqs[current.b]) playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.1);
     noteIndex = (noteIndex + 1) % bossMelody.length;
   }, 160);
 }
 
 function stopBossMusic(){
-  if(musicInterval){
-    clearInterval(musicInterval);
-    musicInterval = null;
-  }
+  if(musicInterval){ clearInterval(musicInterval); musicInterval = null; }
 }
 
 const inputs = { left: false, right: false };
@@ -230,8 +187,6 @@ const game = {
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
-  minions: [],
-  swords: [],
   lasers: [],
   enemyDir: 1,
   stageClearTimer: 0,
@@ -256,33 +211,19 @@ function supported(){ return "serial" in navigator; }
 
 async function connectArduino(){
   initAudio();
-  if(!supported()){
-    setStatus("Web Serial is not available.");
-    log("Use a browser that supports Web Serial.");
-    return;
-  }
+  if(!supported()){ setStatus("Web Serial not supported."); return; }
   try{
-    setStatus("Choose the Arduino...");
+    setStatus("Selecting Arduino...");
     port = await navigator.serial.requestPort();
-    await port.open({baudRate:115200,dataBits:8,stopBits:1,parity:"none",flowControl:"none"});
-    setStatus("Connected • Stage 1 • Lives 3");
-    log("Serial opened at 115200 baud.");
-    resetGame();
-    readLoop();
-  }catch(err){
-    setStatus("Connection failed");
-    log("ERROR: " + err.message);
-  }
+    await port.open({baudRate:115200});
+    setStatus("Connected"); resetGame(); readLoop();
+  }catch(err){ setStatus("Connection failed"); log("ERR: "+err.message); }
 }
 
 async function disconnectArduino(){
-  try{
-    if(reader){ await reader.cancel(); reader.releaseLock(); reader=null; }
-  }catch(_){}
+  try{ if(reader){ await reader.cancel(); reader.releaseLock(); reader=null; } }catch(_){}
   try{ if(port) await port.close(); }catch(_){}
-  port=null;
-  setStatus("Disconnected");
-  log("Serial disconnected.");
+  port=null; setStatus("Disconnected");
 }
 
 async function readLoop(){
@@ -300,30 +241,19 @@ async function readLoop(){
       for(const raw of lines){
         const cmd = raw.trim().toUpperCase();
         if(cmd==="LEFT"){ 
-          if(game.screen === "menu"){
-            game.difficultyIdx = (game.difficultyIdx + 3) % 4;
-          } else {
-            inputs.left = true; inputs.right = false; 
-          }
+          if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+          else { inputs.left = true; inputs.right = false; }
         }
         else if(cmd==="RIGHT"){ 
-          if(game.screen === "menu"){
-            game.difficultyIdx = (game.difficultyIdx + 1) % 4;
-          } else {
-            inputs.right = true; inputs.left = false; 
-          }
+          if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+          else { inputs.right = true; inputs.left = false; }
         }
         else if(cmd==="RELEASE"){ inputs.left = false; inputs.right = false; }
         else if(cmd==="SHOOT") shoot();
       }
     }
-  }catch(err){
-    if(port) log("READ ERROR: " + err.message);
-  }finally{
-    try{ if(reader) reader.releaseLock(); }catch(_){}
-    reader=null;
-    readLoopRunning=false;
-  }
+  }catch(err){ if(port) log("READ ERR: "+err.message); }
+  finally{ if(reader) reader.releaseLock(); reader=null; readLoopRunning=false; }
 }
 
 function resetGame(){
@@ -336,26 +266,19 @@ function resetGame(){
   game.playerX=W/2-5;
   game.lastPlayerShootTime=0;
   game.bullets=[];
-  game.minions=[];
-  game.swords=[];
   game.lasers=[];
   game.invulnerableUntil=0;
   game.message="STAGE 1 (" + DIFFICULTIES[game.difficultyIdx].name + ")";
   game.messageUntil=performance.now()+1200;
   game.boss=null;
-  game.bossMoveTimer=0;
-  game.bossShootTimer=0;
   spawnCurrentStage();
 }
 
 function getSpeedMultiplier(){
-  const diff = DIFFICULTIES[game.difficultyIdx];
-  return Math.pow(1.03, game.stage - 1) * diff.speedMult;
+  return Math.pow(1.03, game.stage - 1) * DIFFICULTIES[game.difficultyIdx].speedMult;
 }
 
 function spawnCurrentStage(){
-  game.minions = [];
-  game.swords = [];
   game.lasers = [];
   if(game.stage === 5 || game.stage === 10 || game.stage === 15 || game.stage >= 20){
     spawnBoss();
@@ -395,24 +318,14 @@ function spawnStage(){
 
       if(hasSpecialEnemies){
         const rand = Math.random();
-        if(rand < 0.20){
-          type = "tank";
-          hp = 4;
-        } else if(rand < 0.40){
-          type = "flash";
-        } else if(rand < 0.60){
-          type = "spread";
-        }
+        if(rand < 0.20){ type = "tank"; hp = 4; }
+        else if(rand < 0.40){ type = "flash"; }
+        else if(rand < 0.60){ type = "spread"; }
       }
 
       game.enemies.push({
-        x:startX+c*gapX,
-        y:startY+r*gapY,
-        w:20,h:15,
-        type: type,
-        hp: hp,
-        maxHp: hp,
-        alive:true,
+        x: startX+c*gapX, y: startY+r*gapY, w: 20, h: 15,
+        type: type, hp: hp, maxHp: hp, alive: true,
         shootTimer: Math.random() * 1000,
         nextShootInterval: getRandomEnemyInterval()
       });
@@ -426,51 +339,26 @@ function spawnStage(){
 function spawnBoss(){
   game.enemies=[];
   game.bullets=[];
-  game.swords=[];
   game.lasers=[];
   game.stageClearTimer=0;
   game.bossMoveTimer=0;
   game.bossShootTimer=0;
 
-  let baseHp = 40;
-  let type = "undyne";
-  let title = "UNDYNE THE UNDYING";
+  let baseHp = 40, type = "undyne", title = "UNDYNE THE UNDYING";
 
-  if(game.stage === 10){
-    baseHp = 80;
-    type = "asgore";
-    title = "ASGORE";
-  } else if(game.stage === 15){
-    baseHp = 120;
-    type = "sans";
-    title = "SANS";
-  } else if(game.stage >= 20){
-    baseHp = 180;
-    type = "asriel";
-    title = "ASRIEL - GOD OF HYPERDEATH";
-  }
+  if(game.stage === 10){ baseHp = 80; type = "asgore"; title = "ASGORE"; }
+  else if(game.stage === 15){ baseHp = 120; type = "sans"; title = "SANS"; }
+  else if(game.stage >= 20){ baseHp = 180; type = "asriel"; title = "ASRIEL - GOD OF HYPERDEATH"; }
 
-  // Dynamic HP scaling based on cannons player currently possesses
+  // Dynamic Boss HP scaling based on cannons level
   let hp = Math.floor(baseHp * (1 + 0.3 * (game.cannons - 1)));
   if(game.difficultyIdx === 3) hp = Math.floor(hp * 1.3);
 
   game.boss={
-    type: type,
-    x:W/2-32,
-    y:35,
-    w:64,
-    h:34,
-    hp:hp,
-    maxHp:hp,
-    dir:1,
-    speed:0.075 * getSpeedMultiplier(),
-    spiralAngle: 0,
-    attackPattern: 0,
-    patternTimer: 0,
-    isImmortal: false,
-    immortalTimer: 0,
-    spiralCycleCount: 0,
-    phase2Spawned: false
+    type: type, x: W/2-32, y: 35, w: 64, h: 34,
+    hp: hp, maxHp: hp, dir: 1, speed: 0.075 * getSpeedMultiplier(),
+    spiralAngle: 0, attackPattern: 0, patternTimer: 0,
+    isImmortal: false, immortalTimer: 0
   };
 
   game.nextBossShootInterval = 400 * DIFFICULTIES[game.difficultyIdx].delayMult;
@@ -483,8 +371,7 @@ function spawnBoss(){
 function shoot(){
   initAudio();
   if(game.screen==="menu" || game.screen==="gameover" || game.screen==="won"){
-    resetGame();
-    return;
+    resetGame(); return;
   }
   if(game.screen!=="playing") return;
 
@@ -492,8 +379,7 @@ function shoot(){
   if(now - game.lastPlayerShootTime < 100) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 24){
-    const cx = game.playerX + 5;
-    const cy = game.playerY;
+    const cx = game.playerX + 5, cy = game.playerY;
 
     if(game.cannons === 1){
       game.bullets.push({ x: cx, y: cy, vx: 0, vy: -0.32, owner: "player" });
@@ -523,53 +409,49 @@ function shoot(){
   }
 }
 
+// Integrated Boss Attacks + NPC Minion Spawns
 function bossShoot(){
   if(!game.boss) return;
   const b = game.boss;
   const speed = getSpeedMultiplier();
   const diff = DIFFICULTIES[game.difficultyIdx];
-  const centerX = b.x + b.w / 2;
-  const centerY = b.y + b.h / 2;
+  const centerX = b.x + b.w / 2, centerY = b.y + b.h / 2;
   let baseDelay = 400 * diff.delayMult;
 
   if(b.type === "undyne"){
-    const mode = b.attackPattern % 3;
+    const mode = b.attackPattern % 4;
 
     if(mode === 0){
       // Spear Cascade
       const offsets = game.difficultyIdx >= 2 ? [-0.1, -0.05, 0, 0.05, 0.1] : [-0.06, 0, 0.06];
       for(const vx of offsets){
-        game.bullets.push({
-          x: centerX, y: b.y + b.h,
-          vx: vx * speed, vy: 0.25 * speed,
-          owner: "undyne_spear"
-        });
+        game.bullets.push({ x: centerX, y: b.y + b.h, vx: vx * speed, vy: 0.25 * speed, owner: "undyne_spear" });
       }
       baseDelay = 280 * diff.delayMult;
     } else if(mode === 1){
       // Targeted Spear Trap around Player
       const px = game.playerX + 5;
-      const targetOffsets = [-28, -14, 14, 28];
-      for(let offset of targetOffsets){
-        game.bullets.push({
-          x: px + offset, y: 10,
-          vx: 0, vy: 0.28 * speed,
-          owner: "undyne_spear"
-        });
+      for(let offset of [-28, -14, 14, 28]){
+        game.bullets.push({ x: px + offset, y: 10, vx: 0, vy: 0.28 * speed, owner: "undyne_spear" });
       }
       baseDelay = 450 * diff.delayMult;
-    } else {
-      // Ring burst
+    } else if(mode === 2){
+      // Spear Ring Burst
       for(let a = 0; a < 8; a++){
         const angle = (a / 8) * Math.PI * 2;
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.12 * speed,
-          vy: Math.sin(angle) * 0.12 * speed,
-          owner: "boss"
-        });
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.12 * speed, vy: Math.sin(angle) * 0.12 * speed, owner: "boss" });
       }
       baseDelay = 380 * diff.delayMult;
+    } else {
+      // Minion Assist: Flash Shooter Support
+      if(game.enemies.length < 2){
+        game.enemies.push({
+          x: Math.random() * (W - 30) + 15, y: b.y + b.h + 10, w: 20, h: 15,
+          type: "flash", hp: 1, maxHp: 1, alive: true,
+          shootTimer: 0, nextShootInterval: 800
+        });
+      }
+      baseDelay = 500 * diff.delayMult;
     }
 
     b.patternTimer++;
@@ -577,36 +459,34 @@ function bossShoot(){
   }
 
   else if(b.type === "asgore"){
-    const mode = b.attackPattern % 2;
+    const mode = b.attackPattern % 3;
 
     if(mode === 0){
       // Trident Wave
       const px = game.playerX + 5;
       const angle = Math.atan2(game.playerY - centerY, px - centerX);
-      const offsets = [-0.3, -0.15, 0, 0.15, 0.3];
-      for(let offset of offsets){
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle + offset) * 0.12 * speed,
-          vy: Math.sin(angle + offset) * 0.12 * speed,
-          owner: "boss"
-        });
+      for(let offset of [-0.3, -0.15, 0, 0.15, 0.3]){
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle + offset) * 0.12 * speed, vy: Math.sin(angle + offset) * 0.12 * speed, owner: "boss" });
       }
       baseDelay = 480 * diff.delayMult;
-    } else {
-      // Spiral Hell
-      const numRays = 12;
-      for(let i=0; i<numRays; i++){
-        const angle = b.spiralAngle + (i * (Math.PI * 2 / numRays));
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.09 * speed,
-          vy: Math.sin(angle) * 0.09 * speed,
-          owner: "boss"
-        });
+    } else if(mode === 1){
+      // Trident Spiral
+      for(let i=0; i<12; i++){
+        const angle = b.spiralAngle + (i * (Math.PI * 2 / 12));
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.09 * speed, vy: Math.sin(angle) * 0.09 * speed, owner: "boss" });
       }
       b.spiralAngle += 0.2;
       baseDelay = 200 * diff.delayMult;
+    } else {
+      // Minion Assist: Tank Vanguard Shield
+      if(game.enemies.length < 1){
+        game.enemies.push({
+          x: W / 2 - 10, y: b.y + b.h + 15, w: 20, h: 15,
+          type: "tank", hp: 4, maxHp: 4, alive: true,
+          shootTimer: 0, nextShootInterval: 1200
+        });
+      }
+      baseDelay = 600 * diff.delayMult;
     }
 
     b.patternTimer++;
@@ -614,44 +494,38 @@ function bossShoot(){
   }
 
   else if(b.type === "sans"){
-    const mode = b.attackPattern % 3;
+    const mode = b.attackPattern % 4;
 
     if(mode === 0){
       // Bone Wall with Gap
       const gapIndex = Math.floor(Math.random() * 8);
       for(let i=0; i<10; i++){
         if(i !== gapIndex){
-          game.bullets.push({
-            x: i * 32 + 16, y: b.y + b.h,
-            vx: 0, vy: 0.12 * speed,
-            owner: "boss"
-          });
+          game.bullets.push({ x: i * 32 + 16, y: b.y + b.h, vx: 0, vy: 0.12 * speed, owner: "boss" });
         }
       }
       baseDelay = 550 * diff.delayMult;
     } else if(mode === 1){
-      // Gaster Blaster Beam (Vertical Laser sweep across player position)
-      game.lasers.push({
-        x: game.playerX - 10,
-        y: 0,
-        w: 30,
-        h: H,
-        timer: 800,
-        warning: true
-      });
+      // Gaster Blaster Vertical Beam
+      game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 800, warning: true });
       baseDelay = 700 * diff.delayMult;
-    } else {
+    } else if(mode === 2){
       // Chaos Burst
       for(let i=0; i<6; i++){
         const angle = Math.random() * Math.PI * 2;
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.15 * speed,
-          vy: Math.sin(angle) * 0.15 * speed,
-          owner: "boss"
-        });
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.15 * speed, vy: Math.sin(angle) * 0.15 * speed, owner: "boss" });
       }
       baseDelay = 220 * diff.delayMult;
+    } else {
+      // Minion Assist: Spread Shooter Distraction
+      if(game.enemies.length < 2){
+        game.enemies.push({
+          x: Math.random() < 0.5 ? 20 : W - 40, y: b.y + b.h + 10, w: 20, h: 15,
+          type: "spread", hp: 1, maxHp: 1, alive: true,
+          shootTimer: 0, nextShootInterval: 900
+        });
+      }
+      baseDelay = 500 * diff.delayMult;
     }
 
     b.patternTimer++;
@@ -659,38 +533,37 @@ function bossShoot(){
   }
 
   else if(b.type === "asriel"){
-    const mode = b.attackPattern % 3;
+    const mode = b.attackPattern % 4;
 
     if(mode === 0){
-      // Hyper Goner Pull / Radial Shockwave
+      // Hyper Goner Radial Void Burst
       for(let i=0; i<14; i++){
         const angle = (i / 14) * Math.PI * 2;
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.11 * speed,
-          vy: Math.sin(angle) * 0.11 * speed,
-          owner: "boss"
-        });
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.11 * speed, vy: Math.sin(angle) * 0.11 * speed, owner: "boss" });
       }
       baseDelay = 380 * diff.delayMult;
     } else if(mode === 1){
       // Starfall
       for(let i = 0; i < 4; i++){
-        game.bullets.push({
-          x: Math.random() * (W - 20) + 10, y: 10,
-          vx: (Math.random() - 0.5) * 0.05,
-          vy: 0.13 * speed,
-          owner: "asriel_star"
-        });
+        game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: (Math.random() - 0.5) * 0.05, vy: 0.13 * speed, owner: "asriel_star" });
       }
       baseDelay = 300 * diff.delayMult;
-    } else {
-      // Dual Lasers on Flanks
+    } else if(mode === 2){
+      // Dual Flank Lasers
       game.lasers.push(
         { x: 20, y: 0, w: 25, h: H, timer: 700, warning: true },
         { x: W - 45, y: 0, w: 25, h: H, timer: 700, warning: true }
       );
       baseDelay = 650 * diff.delayMult;
+    } else {
+      // Final Chaos: Double Elite Minions (Tank + Spread)
+      if(game.enemies.length < 2){
+        game.enemies.push(
+          { x: W / 2 - 35, y: b.y + b.h + 20, w: 20, h: 15, type: "tank", hp: 4, maxHp: 4, alive: true, shootTimer: 0, nextShootInterval: 1000 },
+          { x: W / 2 + 15, y: b.y + b.h + 20, w: 20, h: 15, type: "spread", hp: 1, maxHp: 1, alive: true, shootTimer: 0, nextShootInterval: 900 }
+        );
+      }
+      baseDelay = 750 * diff.delayMult;
     }
 
     b.patternTimer++;
@@ -701,17 +574,11 @@ function bossShoot(){
 }
 
 function hit(a,b){
-  return a.x < b.x+b.w && a.x+a.w > b.x &&
-         a.y < b.y+b.h && a.y+a.h > b.y;
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 }
 
 function getPlayerHitbox(){
-  return {
-    x: game.playerX + 3,
-    y: game.playerY + 2,
-    w: 4,
-    h: 4
-  };
+  return { x: game.playerX + 3, y: game.playerY + 2, w: 4, h: 4 };
 }
 
 function loseLife(){
@@ -724,17 +591,15 @@ function loseLife(){
   game.messageUntil=now+900;
 
   if(game.lives<=0){
-    game.lives=0;
-    game.screen="gameover";
-    stopBossMusic();
+    game.lives=0; game.screen="gameover"; stopBossMusic();
   }
 }
 
 function updateEnemies(dt){
   const speed = getSpeedMultiplier();
-
   const alive = game.enemies.filter(e => e.alive);
-  if(alive.length){
+
+  if(alive.length && !game.boss){
     let minX = Math.min(...alive.map(e => e.x));
     let maxX = Math.max(...alive.map(e => e.x));
     const step = 0.035 * speed * dt * game.enemyDir;
@@ -758,26 +623,15 @@ function updateEnemies(dt){
       e.nextShootInterval = getRandomEnemyInterval();
 
       if(e.type === "flash"){
-        // High speed single bullet
-        game.bullets.push({
-          x: e.x + 10, y: e.y + 14,
-          vx: 0, vy: 0.28 * speed,
-          owner: "enemy"
-        });
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.28 * speed, owner: "enemy" });
       } else if(e.type === "spread"){
-        // 3-bullet fan attack
         game.bullets.push(
           { x: e.x + 10, y: e.y + 14, vx: -0.06 * speed, vy: 0.14 * speed, owner: "enemy" },
           { x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.14 * speed, owner: "enemy" },
           { x: e.x + 10, y: e.y + 14, vx: 0.06 * speed, vy: 0.14 * speed, owner: "enemy" }
         );
       } else {
-        // Standard or Tank slow attack
-        game.bullets.push({
-          x: e.x + 10, y: e.y + 14,
-          vx: 0, vy: 0.14 * speed,
-          owner: "enemy"
-        });
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.14 * speed, owner: "enemy" });
       }
     }
   }
@@ -790,28 +644,24 @@ function updateLasers(dt){
     l.timer -= dt;
 
     if(l.timer < 300) {
-      l.warning = false; // Active laser beam phase
+      l.warning = false;
       if(hit(pr, { x: l.x, y: l.y, w: l.w, h: l.h })){
         loseLife();
       }
     }
 
-    if(l.timer <= 0){
-      game.lasers.splice(i, 1);
-    }
+    if(l.timer <= 0) game.lasers.splice(i, 1);
   }
 }
 
 function killBoss(){
   game.boss=null;
   game.bullets=[];
-  game.minions=[];
-  game.swords=[];
+  game.enemies=[];
   game.lasers=[];
   stopBossMusic();
   sfx.clear();
   game.stageClearTimer=performance.now()+1500;
-
   game.cannons++;
 
   if(game.stage >= 20){
@@ -833,23 +683,15 @@ function update(dt){
 
   if(game.boss){
     const b=game.boss;
-
     const moveSpeed = b.isImmortal ? b.speed * 2.0 : b.speed;
     b.x += b.dir * moveSpeed * dt;
-    if(b.x <= 4){ 
-      b.x=4; 
-      b.dir=1; 
-    } else if(b.x+b.w >= W-4){ 
-      b.x=W-4-b.w; 
-      b.dir=-1; 
-    }
+
+    if(b.x <= 4){ b.x=4; b.dir=1; }
+    else if(b.x+b.w >= W-4){ b.x=W-4-b.w; b.dir=-1; }
 
     if(b.isImmortal){
       b.immortalTimer -= dt;
-      if(b.immortalTimer <= 0){
-        killBoss();
-        return;
-      }
+      if(b.immortalTimer <= 0){ killBoss(); return; }
     }
 
     game.bossShootTimer += dt;
@@ -857,112 +699,73 @@ function update(dt){
       game.bossShootTimer = 0;
       bossShoot();
     }
-
-    for(const bullet of game.bullets){
-      bullet.x += (bullet.vx || 0) * dt;
-      bullet.y += bullet.vy * dt;
-
-      if(bullet.owner === "asriel_star" && bullet.y > H * 0.45 && !bullet.split){
-        bullet.split = true;
-        const count = game.difficultyIdx === 3 ? 6 : 4;
-        for(let a=0; a<count; a++){
-          const ang = a * (Math.PI * 2 / count);
-          game.bullets.push({
-            x: bullet.x, y: bullet.y,
-            vx: Math.cos(ang) * 0.08 * getSpeedMultiplier(),
-            vy: Math.sin(ang) * 0.08 * getSpeedMultiplier(),
-            owner: "boss"
-          });
-        }
-      }
-    }
-    game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
-
-    for(const bullet of game.bullets){
-      if(bullet.owner!=="boss" && bullet.owner!=="enemy" && bullet.owner!=="asriel_star" && bullet.owner!=="undyne_spear") continue;
-      
-      let br;
-      if(bullet.owner === "undyne_spear"){
-        br = { x: bullet.x - 4, y: bullet.y, w: 8, h: 20 };
-      } else {
-        br = { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
-      }
-
-      const pr = getPlayerHitbox();
-      if(hit(br,pr)){
-        loseLife();
-      }
-    }
-
-    for(const bullet of game.bullets){
-      if(bullet.owner!=="player") continue;
-      const br={x:bullet.x-1,y:bullet.y-5,w:2,h:7};
-      if(hit(br,b)){
-        bullet.y=-30;
-        if(!b.isImmortal){
-          b.hp--;
-          game.score+=25;
-          sfx.hit();
-
-          if(b.hp<=0){
-            if(b.type === "undyne" && !b.isImmortal){
-              b.hp = 0;
-              b.isImmortal = true;
-              b.immortalTimer = 10000;
-              game.message = "UNDYNE REFUSES TO DIE! (10s)";
-              game.messageUntil = performance.now() + 2000;
-            } else {
-              killBoss();
-            }
-          }
-        }
-      }
-    }
-
-    if(game.boss){
-      const pr = getPlayerHitbox();
-      if(hit(pr,b)) loseLife();
-    }
-
-    if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
-      game.stageClearTimer=0;
-      game.stage++;
-      game.lives++;
-      spawnCurrentStage();
-    }
-
-    return;
   }
 
   updateEnemies(dt);
 
-  for(const b of game.bullets){
-    b.x += (b.vx || 0) * dt;
-    b.y += b.vy * dt;
-  }
-  game.bullets=game.bullets.filter(b=>b.x > -15 && b.x < W+15 && b.y > -15 && b.y < H+15);
+  for(const bullet of game.bullets){
+    bullet.x += (bullet.vx || 0) * dt;
+    bullet.y += bullet.vy * dt;
 
-  for(const e of game.enemies){
-    if(!e.alive) continue;
-    if(e.y+e.h >= game.playerY){ e.alive=false; loseLife(); continue; }
-    const playerRect = getPlayerHitbox();
-    if(hit(playerRect,e)){ loseLife(); }
+    if(bullet.owner === "asriel_star" && bullet.y > H * 0.45 && !bullet.split){
+      bullet.split = true;
+      const count = game.difficultyIdx === 3 ? 6 : 4;
+      for(let a=0; a<count; a++){
+        const ang = a * (Math.PI * 2 / count);
+        game.bullets.push({
+          x: bullet.x, y: bullet.y,
+          vx: Math.cos(ang) * 0.08 * getSpeedMultiplier(),
+          vy: Math.sin(ang) * 0.08 * getSpeedMultiplier(),
+          owner: "boss"
+        });
+      }
+    }
+  }
+  game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
+
+  const pr = getPlayerHitbox();
+
+  // Enemy / Boss Bullet Collisions with Player
+  for(const bullet of game.bullets){
+    if(bullet.owner==="player") continue;
+    let br = bullet.owner === "undyne_spear" 
+      ? { x: bullet.x - 4, y: bullet.y, w: 8, h: 20 }
+      : { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
+
+    if(hit(br, pr)){ loseLife(); }
   }
 
-  for(const b of game.bullets){
-    if(b.owner!=="enemy") continue;
-    const br={x:b.x-1,y:b.y-5,w:2,h:7};
-    const pr = getPlayerHitbox();
-    if(hit(br,pr)){ loseLife(); }
-  }
+  // Player Bullet Collisions with Enemies and Boss
+  for(const bullet of game.bullets){
+    if(bullet.owner!=="player") continue;
+    const br={x:bullet.x-1,y:bullet.y-5,w:2,h:7};
 
-  for(const b of game.bullets){
-    if(b.owner!=="player") continue;
-    const br={x:b.x-1,y:b.y-5,w:2,h:7};
+    if(game.boss && hit(br, game.boss)){
+      bullet.y = -30;
+      if(!game.boss.isImmortal){
+        game.boss.hp--;
+        game.score += 25;
+        sfx.hit();
+
+        if(game.boss.hp <= 0){
+          if(game.boss.type === "undyne" && !game.boss.isImmortal){
+            game.boss.hp = 0;
+            game.boss.isImmortal = true;
+            game.boss.immortalTimer = 10000;
+            game.message = "UNDYNE REFUSES TO DIE! (10s)";
+            game.messageUntil = performance.now() + 2000;
+          } else {
+            killBoss();
+          }
+        }
+      }
+      continue;
+    }
+
     for(const e of game.enemies){
       if(!e.alive) continue;
-      if(hit(br,e)){
-        b.y = -30;
+      if(hit(br, e)){
+        bullet.y = -30;
         e.hp--;
         sfx.hit();
         if(e.hp <= 0){
@@ -974,17 +777,23 @@ function update(dt){
     }
   }
 
-  game.enemies=game.enemies.filter(e=>e.alive);
-
-  if(game.enemies.length===0 && game.stageClearTimer===0){
-    sfx.clear();
-    game.stageClearTimer=performance.now()+1200;
-    game.message="STAGE CLEAR!";
-    game.messageUntil=performance.now()+1100;
+  for(const e of game.enemies){
+    if(!e.alive) continue;
+    if(e.y+e.h >= game.playerY){ e.alive=false; loseLife(); continue; }
+    if(hit(pr, e)){ loseLife(); }
   }
 
-  if(game.stageClearTimer && performance.now()>=game.stageClearTimer){
-    game.stageClearTimer=0;
+  game.enemies = game.enemies.filter(e => e.alive);
+
+  if(!game.boss && game.enemies.length === 0 && game.stageClearTimer === 0){
+    sfx.clear();
+    game.stageClearTimer = performance.now() + 1200;
+    game.message = "STAGE CLEAR!";
+    game.messageUntil = performance.now() + 1100;
+  }
+
+  if(game.stageClearTimer && performance.now() >= game.stageClearTimer){
+    game.stageClearTimer = 0;
     game.stage++;
     game.lives++;
     spawnCurrentStage();
@@ -996,42 +805,27 @@ function clearScreen(){
   ctx.fillRect(0,0,W,H);
   ctx.fillStyle="#24364d";
   for(let i=0;i<45;i++){
-    const x=(i*73)%W, y=(i*47)%H;
-    ctx.fillRect(x,y,1,1);
+    ctx.fillRect((i*73)%W, (i*47)%H, 1, 1);
   }
 }
 
 function text(t,x,y,size=12,align="left",color="#fff"){
-  ctx.fillStyle=color;
-  ctx.font=`${size}px monospace`;
-  ctx.textAlign=align;
-  ctx.fillText(t,x,y);
+  ctx.fillStyle=color; ctx.font=`${size}px monospace`; ctx.textAlign=align; ctx.fillText(t,x,y);
 }
 
 function drawPlayer(){
-  const flashing=performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0;
-  if(flashing) return;
+  if(performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0) return;
   const x=game.playerX,y=game.playerY;
 
   ctx.fillStyle="#70e8ff";
   ctx.beginPath();
-  ctx.moveTo(x+5, y);
-  ctx.lineTo(x+10, y+8);
-  ctx.lineTo(x+7, y+6);
-  ctx.lineTo(x+5, y+8);
-  ctx.lineTo(x+3, y+6);
-  ctx.lineTo(x, y+8);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(x+5, y); ctx.lineTo(x+10, y+8); ctx.lineTo(x+7, y+6);
+  ctx.lineTo(x+5, y+8); ctx.lineTo(x+3, y+6); ctx.lineTo(x, y+8);
+  ctx.closePath(); ctx.fill();
 
   ctx.fillStyle="#ffff55";
-  if(game.cannons >= 2){
-    ctx.fillRect(x, y+3, 1, 3);
-    ctx.fillRect(x+9, y+3, 1, 3);
-  }
-  if(game.cannons >= 3){
-    ctx.fillRect(x+4, y-1, 2, 2);
-  }
+  if(game.cannons >= 2){ ctx.fillRect(x, y+3, 1, 3); ctx.fillRect(x+9, y+3, 1, 3); }
+  if(game.cannons >= 3){ ctx.fillRect(x+4, y-1, 2, 2); }
 
   ctx.fillStyle="#ff2255";
   ctx.fillRect(x+4, y+3, 2, 2);
@@ -1041,47 +835,27 @@ function drawEnemy(e){
   const x = e.x, y = e.y;
 
   if(e.type === "tank"){
-    // Heavy Armor Tank (Dark Gray & Orange)
-    ctx.fillStyle = "#8899a6";
-    ctx.fillRect(x+1, y, 18, 14);
-    ctx.fillStyle = "#ff6600";
-    ctx.fillRect(x+4, y+3, 12, 8);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(x+7, y-2, 6, 4); // Heavy Cannon Top
+    ctx.fillStyle = "#8899a6"; ctx.fillRect(x+1, y, 18, 14);
+    ctx.fillStyle = "#ff6600"; ctx.fillRect(x+4, y+3, 12, 8);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+7, y-2, 6, 4);
   } else if(e.type === "flash"){
-    // Flash Shooter (Bright Speed Red)
-    ctx.fillStyle = "#ff2255";
-    ctx.fillRect(x+2, y+2, 16, 10);
-    ctx.fillStyle = "#ffff00";
-    ctx.fillRect(x+8, y+8, 4, 7);
+    ctx.fillStyle = "#ff2255"; ctx.fillRect(x+2, y+2, 16, 10);
+    ctx.fillStyle = "#ffff00"; ctx.fillRect(x+8, y+8, 4, 7);
   } else if(e.type === "spread"){
-    // Spread Shooter (Purple Triple Barrel)
-    ctx.fillStyle = "#aa00ff";
-    ctx.fillRect(x, y+3, 20, 8);
-    ctx.fillStyle = "#00ffff";
-    ctx.fillRect(x+2, y+11, 3, 4);
-    ctx.fillRect(x+8, y+11, 4, 4);
-    ctx.fillRect(x+15, y+11, 3, 4);
+    ctx.fillStyle = "#aa00ff"; ctx.fillRect(x, y+3, 20, 8);
+    ctx.fillStyle = "#00ffff"; ctx.fillRect(x+2, y+11, 3, 4);
+    ctx.fillRect(x+8, y+11, 4, 4); ctx.fillRect(x+15, y+11, 3, 4);
   } else {
-    // Standard Enemy
     ctx.fillStyle="#ff647c";
-    ctx.fillRect(x+4,y,12,3);
-    ctx.fillRect(x+2,y+3,16,8);
-    ctx.fillRect(x,y+6,4,5);
-    ctx.fillRect(x+16,y+6,4,5);
-    ctx.fillRect(x+5,y+11,3,4);
-    ctx.fillRect(x+12,y+11,3,4);
-    ctx.fillStyle="#050814";
-    ctx.fillRect(x+5,y+5,3,3);
-    ctx.fillRect(x+12,y+5,3,3);
+    ctx.fillRect(x+4,y,12,3); ctx.fillRect(x+2,y+3,16,8);
+    ctx.fillRect(x,y+6,4,5); ctx.fillRect(x+16,y+6,4,5);
+    ctx.fillRect(x+5,y+11,3,4); ctx.fillRect(x+12,y+11,3,4);
+    ctx.fillStyle="#050814"; ctx.fillRect(x+5,y+5,3,3); ctx.fillRect(x+12,y+5,3,3);
   }
 
-  // Draw HP Bar for Tanks
   if(e.type === "tank" && e.hp < e.maxHp){
-    ctx.fillStyle="#333";
-    ctx.fillRect(x, y-5, 20, 2);
-    ctx.fillStyle="#00ff66";
-    ctx.fillRect(x, y-5, 20 * (e.hp / e.maxHp), 2);
+    ctx.fillStyle="#333"; ctx.fillRect(x, y-5, 20, 2);
+    ctx.fillStyle="#00ff66"; ctx.fillRect(x, y-5, 20 * (e.hp / e.maxHp), 2);
   }
 }
 
@@ -1092,10 +866,8 @@ function drawLasers(){
       ctx.fillRect(l.x, l.y, l.w, l.h);
       text("WARNING!", l.x + l.w/2, 120, 9, "center", "#ff3355");
     } else {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(l.x, l.y, l.w, l.h);
-      ctx.fillStyle = "#00ffff";
-      ctx.fillRect(l.x + 3, l.y, l.w - 6, l.h);
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(l.x, l.y, l.w, l.h);
+      ctx.fillStyle = "#00ffff"; ctx.fillRect(l.x + 3, l.y, l.w - 6, l.h);
     }
   }
 }
@@ -1104,25 +876,16 @@ function drawBullet(b){
   if(b.owner==="undyne_spear"){
     ctx.fillStyle = "#00ffff";
     ctx.beginPath();
-    ctx.moveTo(b.x, b.y + 20);
-    ctx.lineTo(b.x - 4, b.y + 6);
-    ctx.lineTo(b.x - 2, b.y + 6);
-    ctx.lineTo(b.x - 2, b.y);
-    ctx.lineTo(b.x + 2, b.y);
-    ctx.lineTo(b.x + 2, b.y + 6);
-    ctx.lineTo(b.x + 4, b.y + 6);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(b.x, b.y + 20); ctx.lineTo(b.x - 4, b.y + 6);
+    ctx.lineTo(b.x - 2, b.y + 6); ctx.lineTo(b.x - 2, b.y);
+    ctx.lineTo(b.x + 2, b.y); ctx.lineTo(b.x + 2, b.y + 6);
+    ctx.lineTo(b.x + 4, b.y + 6); ctx.closePath(); ctx.fill();
   }else if(b.owner==="boss"){
     ctx.fillStyle="#ff8800";
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
   }else if(b.owner==="asriel_star"){
     ctx.fillStyle="#ffff55";
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI * 2); ctx.fill();
   }else{
     ctx.fillStyle=b.owner==="player" ? "#fff28a" : "#ff647c";
     ctx.fillRect(b.x-1,b.y-5,2,7);
@@ -1130,15 +893,10 @@ function drawBullet(b){
 }
 
 function drawBoss(b){
-  if(b.type === "undyne"){
-    ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
-  } else if(b.type === "asgore"){
-    ctx.fillStyle = "#ffaa00";
-  } else if(b.type === "sans"){
-    ctx.fillStyle = "#ffffff";
-  } else if(b.type === "asriel"){
-    ctx.fillStyle = "#e6a1ff";
-  }
+  if(b.type === "undyne") ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
+  else if(b.type === "asgore") ctx.fillStyle = "#ffaa00";
+  else if(b.type === "sans") ctx.fillStyle = "#ffffff";
+  else if(b.type === "asriel") ctx.fillStyle = "#e6a1ff";
 
   ctx.fillRect(b.x+8,b.y+5,b.w-16,b.h-10);
   ctx.fillRect(b.x+16,b.y,b.w-32,5);
@@ -1146,14 +904,11 @@ function drawBoss(b){
   ctx.fillRect(b.x+b.w-10,b.y+12,10,12);
 
   ctx.fillStyle="#000";
-  ctx.fillRect(b.x+17,b.y+11,8,7);
-  ctx.fillRect(b.x+b.w-25,b.y+11,8,7);
+  ctx.fillRect(b.x+17,b.y+11,8,7); ctx.fillRect(b.x+b.w-25,b.y+11,8,7);
 
   if(!b.isImmortal){
-    ctx.fillStyle="#42152b";
-    ctx.fillRect(b.x,b.y-9,b.w,4);
-    ctx.fillStyle="#ff647c";
-    ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
+    ctx.fillStyle="#42152b"; ctx.fillRect(b.x,b.y-9,b.w,4);
+    ctx.fillStyle="#ff647c"; ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
   } else {
     text("IMMORTAL: " + Math.ceil(b.immortalTimer / 1000) + "s", b.x + b.w/2, b.y - 8, 10, "center");
   }
@@ -1172,10 +927,8 @@ function drawHUD(){
 }
 
 function overlay(title,subtitle){
-  ctx.fillStyle="rgba(0,0,0,.72)";
-  ctx.fillRect(0,0,W,H);
-  text(title,160,90,24,"center");
-  text(subtitle,160,120,12,"center");
+  ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
+  text(title,160,90,24,"center"); text(subtitle,160,120,12,"center");
 }
 
 function draw(){
@@ -1189,8 +942,7 @@ function draw(){
 
     DIFFICULTIES.forEach((d, i) => {
       const selected = i === game.difficultyIdx;
-      const prefix = selected ? "► " : "  ";
-      const suffix = selected ? " ◄" : "  ";
+      const prefix = selected ? "► " : "  ", suffix = selected ? " ◄" : "  ";
       const color = selected ? (i === 3 ? "#ff3355" : "#ffff55") : "#888888";
       text(prefix + d.name + suffix, 160, 120 + i * 20, 13, "center", color);
     });
@@ -1216,22 +968,18 @@ function draw(){
 function loop(now){
   const dt=Math.min(40,now-game.lastTime);
   game.lastTime=now;
-  update(dt);
-  draw();
+  update(dt); draw();
   requestAnimationFrame(loop);
 }
 
 function setupTouch(btnId, key){
   const btn = document.getElementById(btnId);
   btn.addEventListener("pointerdown", e => { 
-    e.preventDefault(); 
-    initAudio(); 
+    e.preventDefault(); initAudio(); 
     if(game.screen === "menu"){
       if(key === "left") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
       if(key === "right") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
-    } else {
-      inputs[key] = true; 
-    }
+    } else { inputs[key] = true; }
   });
   btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
   btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
@@ -1248,23 +996,13 @@ fullscreenBtn.addEventListener("click", async () => {
   initAudio();
   const elem = document.getElementById("app");
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    if (elem.requestFullscreen) {
-      await elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) {
-      await elem.webkitRequestFullscreen();
-    }
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock("landscape").catch(() => {});
-    }
+    if (elem.requestFullscreen) await elem.requestFullscreen();
+    else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
+    if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
   } else {
-    if (document.exitFullscreen) {
-      await document.exitFullscreen();
-    } else if (document.webkitExitFullscreen) {
-      await document.webkitExitFullscreen();
-    }
-    if (screen.orientation && screen.orientation.unlock) {
-      screen.orientation.unlock();
-    }
+    if (document.exitFullscreen) await document.exitFullscreen();
+    else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
   }
 });
 
@@ -1272,26 +1010,20 @@ document.addEventListener("keydown", e => {
   initAudio();
   if(e.key === "ArrowLeft"){ 
     e.preventDefault(); 
-    if(game.screen === "menu"){
-      game.difficultyIdx = (game.difficultyIdx + 3) % 4;
-    } else {
-      inputs.left = true; 
-    }
+    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+    else inputs.left = true; 
   }
   if(e.key === "ArrowRight"){ 
     e.preventDefault(); 
-    if(game.screen === "menu"){
-      game.difficultyIdx = (game.difficultyIdx + 1) % 4;
-    } else {
-      inputs.right = true; 
-    }
+    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+    else inputs.right = true; 
   }
   if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
 });
 
 document.addEventListener("keyup", e => {
-  if(e.key === "ArrowLeft"){ inputs.left = false; }
-  if(e.key === "ArrowRight"){ inputs.right = false; }
+  if(e.key === "ArrowLeft") inputs.left = false;
+  if(e.key === "ArrowRight") inputs.right = false;
 });
 
 requestAnimationFrame(loop);
