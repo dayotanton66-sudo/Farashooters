@@ -484,34 +484,20 @@ function bossShoot(){
   let baseDelay = 400;
 
   if(b.type === "undyne"){
-    const speedMult = b.isImmortal ? 1.25 : 1.0;
-    const countMult = b.isImmortal ? 1.5 : 1.0;
+    const speedMult = b.isImmortal ? 1.5 : 1.0;
 
-    if(b.attackPattern % 2 === 0){
-      const numBullets = Math.floor(8 * countMult);
-      for(let i=0; i<numBullets; i++){
-        const angle = i * (Math.PI * 2 / numBullets);
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.09 * speed * speedMult,
-          vy: Math.sin(angle) * 0.09 * speed * speedMult,
-          owner: "boss"
-        });
-      }
-      baseDelay = 500 / speedMult;
-    } else {
-      const count = Math.floor(5 * countMult);
-      for(let i=0; i<count; i++){
-        game.bullets.push({
-          x: b.x + (b.w / count) * i + 6,
-          y: b.y + b.h,
-          vx: (Math.random() - 0.5) * 0.05,
-          vy: (0.12 + Math.random() * 0.04) * speed * speedMult,
-          owner: "boss"
-        });
-      }
-      baseDelay = 400 / speedMult;
-    }
+    // Undyne Spear Attack down the middle
+    game.bullets.push({
+      x: W / 2,
+      y: b.y + b.h,
+      vx: 0,
+      vy: 0.22 * speed * speedMult,
+      owner: "undyne_spear",
+      w: 8,
+      h: 24
+    });
+
+    baseDelay = b.isImmortal ? 280 : 420;
     b.patternTimer++;
     if(b.patternTimer > 6){ b.patternTimer = 0; b.attackPattern++; }
   }
@@ -589,7 +575,6 @@ function bossShoot(){
 
   else if(b.type === "asriel"){
     if(b.attackPattern % 2 === 0){
-      // Star Blaster Attack - drops stars from top that burst
       for(let i = 0; i < 3; i++){
         const dropX = Math.random() * (W - 20) + 10;
         game.bullets.push({
@@ -601,7 +586,6 @@ function bossShoot(){
       }
       baseDelay = 380;
     } else {
-      // Hyper Beam / Shocker Breaker spreading burst
       const numRays = 10;
       for(let i=0; i<numRays; i++){
         const angle = (i / numRays) * Math.PI + Math.PI * 0.1;
@@ -615,7 +599,6 @@ function bossShoot(){
       baseDelay = 500;
     }
 
-    // Phase 2 Sword Attacks
     if(b.phase2Spawned && game.swords.length > 0){
       for(const sword of game.swords){
         const angle = Math.atan2(game.playerY - sword.y, game.playerX - sword.x);
@@ -744,7 +727,6 @@ function update(dt){
   if(game.boss){
     const b=game.boss;
 
-    // Fixed Undyne moving during immortal phase
     const moveSpeed = b.isImmortal ? b.speed * 2.0 : b.speed;
     b.x += b.dir * moveSpeed * dt;
     if(b.x <= 4){ 
@@ -773,7 +755,6 @@ function update(dt){
       game.messageUntil = performance.now() + 1500;
     }
 
-    // Asriel Phase 2 Dual Chaos Sabers
     if(b.type === "asriel" && b.hp < b.maxHp * 0.5 && !b.phase2Spawned){
       b.phase2Spawned = true;
       game.swords = [
@@ -797,7 +778,6 @@ function update(dt){
       bullet.x += (bullet.vx || 0) * dt;
       bullet.y += bullet.vy * dt;
 
-      // Asriel star split logic
       if(bullet.owner === "asriel_star" && bullet.y > H * 0.45 && !bullet.split){
         bullet.split = true;
         for(let a=0; a<4; a++){
@@ -814,8 +794,15 @@ function update(dt){
     game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
 
     for(const bullet of game.bullets){
-      if(bullet.owner!=="boss" && bullet.owner!=="enemy" && bullet.owner!=="asriel_star") continue;
-      const br={x:bullet.x-2,y:bullet.y-2,w:4,h:4};
+      if(bullet.owner!=="boss" && bullet.owner!=="enemy" && bullet.owner!=="asriel_star" && bullet.owner!=="undyne_spear") continue;
+      
+      let br;
+      if(bullet.owner === "undyne_spear"){
+        br = { x: bullet.x - 4, y: bullet.y, w: 8, h: 24 };
+      } else {
+        br = { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
+      }
+
       const pr={x:game.playerX,y:game.playerY,w:16,h:12};
       if(hit(br,pr)){
         bullet.y=H+30;
@@ -837,8 +824,8 @@ function update(dt){
             if(b.type === "undyne" && !b.isImmortal){
               b.hp = 0;
               b.isImmortal = true;
-              b.immortalTimer = 15000;
-              game.message = "UNDYNE REFUSES TO DIE! (15s)";
+              b.immortalTimer = 10000; // Reduced to 10 seconds
+              game.message = "UNDYNE REFUSES TO DIE! (10s)";
               game.messageUntil = performance.now() + 2000;
             } else {
               killBoss();
@@ -985,7 +972,20 @@ function drawSwords(){
 }
 
 function drawBullet(b){
-  if(b.owner==="boss"){
+  if(b.owner==="undyne_spear"){
+    // Draw Undyne Middle Spear
+    ctx.fillStyle = "#00ffff";
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y + 24);
+    ctx.lineTo(b.x - 4, b.y + 8);
+    ctx.lineTo(b.x - 2, b.y + 8);
+    ctx.lineTo(b.x - 2, b.y);
+    ctx.lineTo(b.x + 2, b.y);
+    ctx.lineTo(b.x + 2, b.y + 8);
+    ctx.lineTo(b.x + 4, b.y + 8);
+    ctx.closePath();
+    ctx.fill();
+  }else if(b.owner==="boss"){
     ctx.fillStyle="#ff8800";
     ctx.beginPath();
     ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
