@@ -675,9 +675,8 @@ function loseLife(){
   if(now < game.invulnerableUntil) return;
   game.lives--;
   sfx.damage();
+  // Undertale-Style I-Frames: 1.2 seconds of invulnerability
   game.invulnerableUntil=now+1200;
-  game.playerX=W/2-5;
-  game.bullets=game.bullets.filter(b=>b.owner==="player");
   game.message="HIT! LIVES: " + game.lives;
   game.messageUntil=now+900;
 
@@ -853,7 +852,6 @@ function update(dt){
 
       const pr = getPlayerHitbox();
       if(hit(br,pr)){
-        bullet.y=H+30;
         loseLife();
       }
     }
@@ -910,14 +908,14 @@ function update(dt){
     if(!e.alive) continue;
     if(e.y+e.h >= game.playerY){ e.alive=false; loseLife(); continue; }
     const playerRect = getPlayerHitbox();
-    if(hit(playerRect,e)){ e.alive=false; loseLife(); }
+    if(hit(playerRect,e)){ loseLife(); }
   }
 
   for(const b of game.bullets){
     if(b.owner!=="enemy") continue;
     const br={x:b.x-1,y:b.y-5,w:2,h:7};
     const pr = getPlayerHitbox();
-    if(hit(br,pr)){ b.y=H+20; loseLife(); }
+    if(hit(br,pr)){ loseLife(); }
   }
 
   for(const b of game.bullets){
