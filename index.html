@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>FARASHOOTERS - Undertale Edition</title>
+<title>FARASHOOTERS - Undertale Boss Edition</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;background:#050814;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
@@ -27,7 +27,7 @@ button:active{transform:scale(.97);background:#263752}
 :fullscreen body, :-webkit-full-screen body { padding: 0; margin: 0; background: #000; }
 :fullscreen #app, :-webkit-full-screen #app { width: 100vw; height: 100vh; max-width: 100vw; padding: 4px 10px; justify-content: space-between; }
 :fullscreen h1, :fullscreen #status, :fullscreen .hint, :fullscreen #log, :fullscreen .row,
-:-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen .row { display: none; }
+:-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen #row { display: none; }
 :fullscreen #screenWrap, :-webkit-full-screen #screenWrap { flex: 1; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; min-height: 0; }
 :fullscreen canvas, :-webkit-full-screen canvas { height: 100%; width: auto; max-width: 100%; max-height: 100%; border-radius: 4px; }
 :fullscreen .controls, :-webkit-full-screen .controls { margin-top: 4px; height: 50px; max-width: 100%; }
@@ -147,6 +147,17 @@ const sfx = {
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.start(); osc.stop(audioCtx.currentTime + 0.35);
   },
+  slam(){
+    if(!audioCtx) return;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+  },
   clear(){
     if(!audioCtx) return;
     playSynthNote(noteFreqs['C5'], 'square', 0.1, 0.08);
@@ -187,11 +198,14 @@ const game = {
   cannons: 1,
   playerX: W / 2 - 5,
   playerY: H - 24,
+  playerVy: 0,
+  gravityDir: "DOWN",
   playerSpeed: 0.16,
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
   lasers: [],
+  sabres: [],
   enemyDir: 1,
   stageClearTimer: 0,
   invulnerableUntil: 0,
@@ -201,7 +215,7 @@ const game = {
   boss: null,
   bossMoveTimer: 0,
   bossShootTimer: 0,
-  nextBossShootInterval: 1200
+  nextBossShootInterval: 2400
 };
 
 function setStatus(t){ statusEl.textContent = t; }
@@ -266,7 +280,9 @@ function returnToMenu(){
   game.bullets = [];
   game.enemies = [];
   game.lasers = [];
+  game.sabres = [];
   game.boss = null;
+  game.gravityDir = "DOWN";
   inputs.left = false;
   inputs.right = false;
 }
@@ -279,9 +295,13 @@ function resetGame(){
   game.stage=1;
   game.cannons=1;
   game.playerX=W/2-5;
+  game.playerY=H-24;
+  game.playerVy=0;
+  game.gravityDir="DOWN";
   game.lastPlayerShootTime=0;
   game.bullets=[];
   game.lasers=[];
+  game.sabres=[];
   game.invulnerableUntil=0;
   game.message="STAGE 1 (" + DIFFICULTIES[game.difficultyIdx].name + ")";
   game.messageUntil=performance.now()+1200;
@@ -295,7 +315,9 @@ function getSpeedMultiplier(){
 
 function spawnCurrentStage(){
   game.lasers = [];
-  if(game.stage === 5 || game.stage === 10 || game.stage === 15 || game.stage >= 20){
+  game.sabres = [];
+  game.gravityDir = "DOWN";
+  if(game.stage === 4 || game.stage === 8 || game.stage === 12 || game.stage === 16 || game.stage >= 20){
     spawnBoss();
   }else{
     stopBossMusic();
@@ -324,7 +346,7 @@ function spawnStage(){
   const startX=(W-(cols-1)*gapX)/2-10;
   const startY=35;
 
-  const hasSpecialEnemies = game.stage > 5;
+  const hasSpecialEnemies = game.stage > 4;
 
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
@@ -355,15 +377,17 @@ function spawnBoss(){
   game.enemies=[];
   game.bullets=[];
   game.lasers=[];
+  game.sabres=[];
   game.stageClearTimer=0;
   game.bossMoveTimer=0;
   game.bossShootTimer=0;
 
-  let baseHp = 120, type = "undyne", title = "UNDYNE THE UNDYING";
+  let baseHp = 360, type = "toriel", title = "TORIEL";
 
-  if(game.stage === 10){ baseHp = 240; type = "asgore"; title = "ASGORE"; }
-  else if(game.stage === 15){ baseHp = 360; type = "sans"; title = "SANS"; }
-  else if(game.stage >= 20){ baseHp = 540; type = "asriel"; title = "ASRIEL - GOD OF HYPERDEATH"; }
+  if(game.stage === 8){ baseHp = 540; type = "papyrus"; title = "PAPYRUS"; }
+  else if(game.stage === 12){ baseHp = 720; type = "undyne"; title = "UNDYNE THE UNDYING"; }
+  else if(game.stage === 16){ baseHp = 1080; type = "sans"; title = "SANS"; }
+  else if(game.stage >= 20){ baseHp = 1620; type = "asriel"; title = "ASRIEL - GOD OF HYPERDEATH"; }
 
   let hp = Math.floor(baseHp * (1 + 0.3 * (game.cannons - 1)));
   if(game.difficultyIdx === 3) hp = Math.floor(hp * 1.3);
@@ -375,7 +399,7 @@ function spawnBoss(){
     isImmortal: false, immortalTimer: 0
   };
 
-  game.nextBossShootInterval = 1200 * DIFFICULTIES[game.difficultyIdx].delayMult;
+  game.nextBossShootInterval = 2400 * DIFFICULTIES[game.difficultyIdx].delayMult;
   game.message="STAGE " + game.stage + " • " + title;
   game.messageUntil=performance.now()+1800;
 
@@ -423,149 +447,157 @@ function shoot(){
   }
 }
 
+function summonBossMinions(count, minionType){
+  const aliveMinions = game.enemies.filter(e => e.alive).length;
+  const toSummon = Math.min(count, 8 - aliveMinions);
+  for(let i = 0; i < toSummon; i++){
+    game.enemies.push({
+      x: (W / (toSummon + 1)) * (i + 1) - 10,
+      y: game.boss ? game.boss.y + game.boss.h + 10 : 50,
+      w: 20, h: 15,
+      type: minionType, hp: 1, maxHp: 1, alive: true,
+      shootTimer: 0, nextShootInterval: getRandomEnemyInterval()
+    });
+  }
+}
+
 function bossShoot(){
   if(!game.boss) return;
   const b = game.boss;
   const speed = getSpeedMultiplier();
   const diff = DIFFICULTIES[game.difficultyIdx];
   const centerX = b.x + b.w / 2, centerY = b.y + b.h / 2;
-  let baseDelay = 1200 * diff.delayMult;
+  let baseDelay = 2400 * diff.delayMult;
 
-  if(b.type === "undyne"){
-    const mode = b.attackPattern % 4;
+  // --- TORIEL ---
+  if(b.type === "toriel"){
+    const mode = b.attackPattern % 3;
+    if(mode === 0){ // Hearthfire Spiral
+      for(let i = 0; i < 8; i++){
+        const angle = b.spiralAngle + (i * (Math.PI * 2 / 8));
+        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.1 * speed, vy: Math.sin(angle) * 0.1 * speed, owner: "boss" });
+      }
+      b.spiralAngle += 0.3;
+      baseDelay = 1200 * diff.delayMult;
+    } else if(mode === 1){ // Flame Rain
+      for(let i = 0; i < 5; i++){
+        game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: 0, vy: 0.18 * speed, owner: "boss" });
+      }
+      baseDelay = 1800 * diff.delayMult;
+    } else { // SUMMON 2 Flame Sentinels
+      summonBossMinions(2, "flame_sentinel");
+      baseDelay = 3200 * diff.delayMult;
+    }
+    b.patternTimer++;
+    if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
+  }
 
-    if(mode === 0){
-      const offsets = game.difficultyIdx >= 2 ? [-0.1, -0.05, 0, 0.05, 0.1] : [-0.06, 0, 0.06];
+  // --- PAPYRUS ---
+  else if(b.type === "papyrus"){
+    const mode = b.attackPattern % 3;
+    if(mode === 0){ // Bone Lattice Grid
+      const gap = Math.floor(Math.random() * 6);
+      for(let i = 0; i < 8; i++){
+        if(i !== gap && i !== gap + 1){
+          game.bullets.push({ x: i * 40 + 20, y: 10, vx: 0, vy: 0.14 * speed, owner: "boss" });
+        }
+      }
+      baseDelay = 2000 * diff.delayMult;
+    } else if(mode === 1){ // Bouncing Bones
+      for(let vx of [-0.12, -0.04, 0.04, 0.12]){
+        game.bullets.push({ x: centerX, y: centerY, vx: vx * speed, vy: 0.16 * speed, owner: "boss" });
+      }
+      baseDelay = 1800 * diff.delayMult;
+    } else { // SUMMON 3 Guard Dogs
+      summonBossMinions(3, "guard_dog");
+      baseDelay = 3400 * diff.delayMult;
+    }
+    b.patternTimer++;
+    if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
+  }
+
+  // --- UNDYNE ---
+  else if(b.type === "undyne"){
+    const mode = b.attackPattern % 3;
+    if(mode === 0){ // Spear Matrix
+      const offsets = [-0.08, -0.04, 0, 0.04, 0.08];
       for(const vx of offsets){
-        game.bullets.push({ x: centerX, y: b.y + b.h, vx: vx * speed, vy: 0.25 * speed, owner: "undyne_spear" });
+        game.bullets.push({ x: centerX, y: b.y + b.h, vx: vx * speed, vy: 0.22 * speed, owner: "undyne_spear" });
       }
-      baseDelay = 800 * diff.delayMult;
-    } else if(mode === 1){
-      const px = game.playerX + 5;
-      for(let offset of [-28, -14, 14, 28]){
-        game.bullets.push({ x: px + offset, y: 10, vx: 0, vy: 0.28 * speed, owner: "undyne_spear" });
-      }
-      baseDelay = 1350 * diff.delayMult;
-    } else if(mode === 2){
+      baseDelay = 1600 * diff.delayMult;
+    } else if(mode === 1){ // Spear Ring
       for(let a = 0; a < 8; a++){
         const angle = (a / 8) * Math.PI * 2;
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.12 * speed, vy: Math.sin(angle) * 0.12 * speed, owner: "boss" });
       }
-      baseDelay = 1100 * diff.delayMult;
-    } else {
-      if(game.enemies.length < 2){
-        game.enemies.push({
-          x: Math.random() * (W - 30) + 15, y: b.y + b.h + 10, w: 20, h: 15,
-          type: "flash", hp: 1, maxHp: 1, alive: true,
-          shootTimer: 0, nextShootInterval: 800
-        });
-      }
-      baseDelay = 1500 * diff.delayMult;
+      baseDelay = 2200 * diff.delayMult;
+    } else { // SUMMON 4 Royal Spearsmen
+      summonBossMinions(4, "royal_spearsman");
+      baseDelay = 3600 * diff.delayMult;
     }
-
     b.patternTimer++;
-    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  else if(b.type === "asgore"){
-    const mode = b.attackPattern % 3;
-
-    if(mode === 0){
-      const px = game.playerX + 5;
-      const angle = Math.atan2(game.playerY - centerY, px - centerX);
-      for(let offset of [-0.3, -0.15, 0, 0.15, 0.3]){
-        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle + offset) * 0.12 * speed, vy: Math.sin(angle + offset) * 0.12 * speed, owner: "boss" });
-      }
-      baseDelay = 1400 * diff.delayMult;
-    } else if(mode === 1){
-      for(let i=0; i<12; i++){
-        const angle = b.spiralAngle + (i * (Math.PI * 2 / 12));
-        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.09 * speed, vy: Math.sin(angle) * 0.09 * speed, owner: "boss" });
-      }
-      b.spiralAngle += 0.2;
-      baseDelay = 600 * diff.delayMult;
-    } else {
-      if(game.enemies.length < 1){
-        game.enemies.push({
-          x: W / 2 - 10, y: b.y + b.h + 15, w: 20, h: 15,
-          type: "tank", hp: 4, maxHp: 4, alive: true,
-          shootTimer: 0, nextShootInterval: 1200
-        });
-      }
-      baseDelay = 1800 * diff.delayMult;
-    }
-
-    b.patternTimer++;
-    if(b.patternTimer > 15){ b.patternTimer = 0; b.attackPattern++; }
-  }
-
+  // --- SANS ---
   else if(b.type === "sans"){
     const mode = b.attackPattern % 4;
-
-    if(mode === 0){
+    if(mode === 0){ // Soul Gravity Slam
+      const dirs = ["UP", "DOWN", "LEFT", "RIGHT"];
+      game.gravityDir = dirs[Math.floor(Math.random() * dirs.length)];
+      if(game.gravityDir === "UP") game.playerVy = -0.3;
+      else if(game.gravityDir === "DOWN") game.playerVy = 0.3;
+      game.message = "BLUE SOUL - GRAVITY " + game.gravityDir + "!";
+      game.messageUntil = performance.now() + 1200;
+      sfx.slam();
+      baseDelay = 2400 * diff.delayMult;
+    } else if(mode === 1){ // Gaster Blaster Lasers
+      game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 1400, warning: true });
+      baseDelay = 2600 * diff.delayMult;
+    } else if(mode === 2){ // Bone Wall Burst
       const gapIndex = Math.floor(Math.random() * 8);
-      for(let i=0; i<10; i++){
+      for(let i = 0; i < 10; i++){
         if(i !== gapIndex){
-          game.bullets.push({ x: i * 32 + 16, y: b.y + b.h, vx: 0, vy: 0.12 * speed, owner: "boss" });
+          game.bullets.push({ x: i * 32 + 16, y: b.y + b.h, vx: 0, vy: 0.14 * speed, owner: "boss" });
         }
       }
-      baseDelay = 1600 * diff.delayMult;
-    } else if(mode === 1){
-      game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 1200, warning: true });
       baseDelay = 2000 * diff.delayMult;
-    } else if(mode === 2){
-      for(let i=0; i<6; i++){
-        const angle = Math.random() * Math.PI * 2;
-        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.15 * speed, vy: Math.sin(angle) * 0.15 * speed, owner: "boss" });
-      }
-      baseDelay = 700 * diff.delayMult;
-    } else {
-      if(game.enemies.length < 2){
-        game.enemies.push({
-          x: Math.random() < 0.5 ? 20 : W - 40, y: b.y + b.h + 10, w: 20, h: 15,
-          type: "spread", hp: 1, maxHp: 1, alive: true,
-          shootTimer: 0, nextShootInterval: 900
-        });
-      }
-      baseDelay = 1500 * diff.delayMult;
+    } else { // SUMMON 5 Phantom Blasters
+      summonBossMinions(5, "phantom_blaster");
+      baseDelay = 3800 * diff.delayMult;
     }
-
     b.patternTimer++;
-    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
+  // --- ASRIEL ---
   else if(b.type === "asriel"){
     const mode = b.attackPattern % 4;
-
-    if(mode === 0){
-      for(let i=0; i<14; i++){
-        const angle = (i / 14) * Math.PI * 2;
-        game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.11 * speed, vy: Math.sin(angle) * 0.11 * speed, owner: "boss" });
-      }
-      baseDelay = 1100 * diff.delayMult;
-    } else if(mode === 1){
-      for(let i = 0; i < 4; i++){
-        game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: (Math.random() - 0.5) * 0.05, vy: 0.13 * speed, owner: "asriel_star" });
-      }
-      baseDelay = 900 * diff.delayMult;
-    } else if(mode === 2){
-      game.lasers.push(
-        { x: 20, y: 0, w: 25, h: H, timer: 1000, warning: true },
-        { x: W - 45, y: 0, w: 25, h: H, timer: 1000, warning: true }
-      );
-      baseDelay = 1900 * diff.delayMult;
-    } else {
-      if(game.enemies.length < 2){
-        game.enemies.push(
-          { x: W / 2 - 35, y: b.y + b.h + 20, w: 20, h: 15, type: "tank", hp: 4, maxHp: 4, alive: true, shootTimer: 0, nextShootInterval: 1000 },
-          { x: W / 2 + 15, y: b.y + b.h + 20, w: 20, h: 15, type: "spread", hp: 1, maxHp: 1, alive: true, shootTimer: 0, nextShootInterval: 900 }
-        );
-      }
+    if(mode === 0){ // Targeted Chaos Sabre Strike
+      game.sabres.push({
+        targetX: game.playerX + 5,
+        targetY: game.playerY + 5,
+        timer: 900,
+        slashing: false
+      });
       baseDelay = 2200 * diff.delayMult;
+    } else if(mode === 1){ // Starburst Cluster
+      for(let i = 0; i < 6; i++){
+        game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: (Math.random() - 0.5) * 0.05, vy: 0.14 * speed, owner: "asriel_star" });
+      }
+      baseDelay = 1800 * diff.delayMult;
+    } else if(mode === 2){ // Dual Lasers
+      game.lasers.push(
+        { x: 20, y: 0, w: 25, h: H, timer: 1200, warning: true },
+        { x: W - 45, y: 0, w: 25, h: H, timer: 1200, warning: true }
+      );
+      baseDelay = 2600 * diff.delayMult;
+    } else { // SUMMON 6 Astral Entities
+      summonBossMinions(6, "astral_entity");
+      baseDelay = 4000 * diff.delayMult;
     }
-
     b.patternTimer++;
-    if(b.patternTimer > 12){ b.patternTimer = 0; b.attackPattern++; }
+    if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   game.nextBossShootInterval = baseDelay;
@@ -620,7 +652,18 @@ function updateEnemies(dt){
       e.shootTimer = 0;
       e.nextShootInterval = getRandomEnemyInterval();
 
-      if(e.type === "flash"){
+      if(e.type === "flame_sentinel"){
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: (game.playerX - e.x) * 0.0005 * speed, vy: 0.12 * speed, owner: "boss" });
+      } else if(e.type === "guard_dog"){
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.22 * speed, owner: "boss" });
+      } else if(e.type === "royal_spearsman"){
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.25 * speed, owner: "undyne_spear" });
+      } else if(e.type === "phantom_blaster"){
+        game.lasers.push({ x: e.x - 5, y: 0, w: 12, h: H, timer: 800, warning: true });
+      } else if(e.type === "astral_entity"){
+        const angle = Math.atan2(game.playerY - e.y, game.playerX - e.x);
+        game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: Math.cos(angle) * 0.15 * speed, vy: Math.sin(angle) * 0.15 * speed, owner: "asriel_star" });
+      } else if(e.type === "flash"){
         game.bullets.push({ x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.28 * speed, owner: "enemy" });
       } else if(e.type === "spread"){
         game.bullets.push(
@@ -652,11 +695,46 @@ function updateLasers(dt){
   }
 }
 
+function updateSabres(dt){
+  const pr = getPlayerHitbox();
+  const speed = getSpeedMultiplier();
+  for(let i = game.sabres.length - 1; i >= 0; i--){
+    const s = game.sabres[i];
+    s.timer -= dt;
+
+    if(s.timer < 300 && !s.slashing){
+      s.slashing = true;
+      sfx.hit();
+      // Execute 4-way cross blasts radiating from the slash target
+      const directions = [
+        { vx: 0, vy: -0.18 }, { vx: 0, vy: 0.18 },
+        { vx: -0.18, vy: 0 }, { vx: 0.18, vy: 0 }
+      ];
+      for(const d of directions){
+        game.bullets.push({
+          x: s.targetX, y: s.targetY,
+          vx: d.vx * speed, vy: d.vy * speed,
+          owner: "asriel_star"
+        });
+      }
+    }
+
+    if(s.slashing){
+      const slashArea = { x: s.targetX - 15, y: s.targetY - 15, w: 30, h: 30 };
+      if(hit(pr, slashArea)){ loseLife(); }
+    }
+
+    if(s.timer <= 0) game.sabres.splice(i, 1);
+  }
+}
+
 function killBoss(){
   game.boss=null;
   game.bullets=[];
   game.enemies=[];
   game.lasers=[];
+  game.sabres=[];
+  game.gravityDir="DOWN";
   stopBossMusic();
   sfx.clear();
   game.stageClearTimer=performance.now()+1500;
@@ -673,11 +751,25 @@ function killBoss(){
 function update(dt){
   if(game.screen!=="playing") return;
 
-  if(inputs.left) game.playerX -= game.playerSpeed * dt;
-  if(inputs.right) game.playerX += game.playerSpeed * dt;
+  // Blue Soul Gravity Physics Movement
+  if(game.gravityDir === "UP"){
+    game.playerY -= game.playerSpeed * dt;
+    if(inputs.left) game.playerX -= game.playerSpeed * dt;
+    if(inputs.right) game.playerX += game.playerSpeed * dt;
+  } else if(game.gravityDir === "LEFT"){
+    game.playerX -= game.playerSpeed * dt;
+  } else if(game.gravityDir === "RIGHT"){
+    game.playerX += game.playerSpeed * dt;
+  } else { // Standard "DOWN"
+    if(inputs.left) game.playerX -= game.playerSpeed * dt;
+    if(inputs.right) game.playerX += game.playerSpeed * dt;
+  }
+
   game.playerX = Math.max(0, Math.min(W - 10, game.playerX));
+  game.playerY = Math.max(15, Math.min(H - 24, game.playerY));
 
   updateLasers(dt);
+  updateSabres(dt);
 
   if(game.boss){
     const b=game.boss;
@@ -813,7 +905,7 @@ function drawPlayer(){
   if(performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0) return;
   const x=game.playerX,y=game.playerY;
 
-  ctx.fillStyle="#70e8ff";
+  ctx.fillStyle = game.gravityDir !== "DOWN" ? "#0066ff" : "#70e8ff"; // Blue SOUL indicator
   ctx.beginPath();
   ctx.moveTo(x+5, y); ctx.lineTo(x+10, y+8); ctx.lineTo(x+7, y+6);
   ctx.lineTo(x+5, y+8); ctx.lineTo(x+3, y+6); ctx.lineTo(x, y+8);
@@ -830,7 +922,22 @@ function drawPlayer(){
 function drawEnemy(e){
   const x = e.x, y = e.y;
 
-  if(e.type === "tank"){
+  if(e.type === "flame_sentinel"){
+    ctx.fillStyle = "#ff6600"; ctx.fillRect(x+4, y+2, 12, 11);
+    ctx.fillStyle = "#ffff00"; ctx.fillRect(x+7, y+5, 6, 5);
+  } else if(e.type === "guard_dog"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+2, y+2, 16, 10);
+    ctx.fillStyle = "#000000"; ctx.fillRect(x+5, y+5, 3, 3); ctx.fillRect(x+12, y+5, 3, 3);
+  } else if(e.type === "royal_spearsman"){
+    ctx.fillStyle = "#00aaff"; ctx.fillRect(x, y, 20, 15);
+    ctx.fillStyle = "#ffff00"; ctx.fillRect(x+8, y+3, 4, 9);
+  } else if(e.type === "phantom_blaster"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+3, y+1, 14, 13);
+    ctx.fillStyle = "#ff0000"; ctx.fillRect(x+6, y+4, 3, 3); ctx.fillRect(x+11, y+4, 3, 3);
+  } else if(e.type === "astral_entity"){
+    ctx.fillStyle = "#e6a1ff"; ctx.fillRect(x+2, y+2, 16, 11);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+8, y+5, 4, 5);
+  } else if(e.type === "tank"){
     ctx.fillStyle = "#8899a6"; ctx.fillRect(x+1, y, 18, 14);
     ctx.fillStyle = "#ff6600"; ctx.fillRect(x+4, y+3, 12, 8);
     ctx.fillStyle = "#ffffff"; ctx.fillRect(x+7, y-2, 6, 4);
@@ -868,6 +975,22 @@ function drawLasers(){
   }
 }
 
+function drawSabres(){
+  for(const s of game.sabres){
+    if(!s.slashing){
+      ctx.strokeStyle = "rgba(255, 0, 85, 0.6)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(s.targetX - 15, s.targetY - 15, 30, 30);
+      text("⚔", s.targetX, s.targetY + 4, 12, "center", "#ff0055");
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(s.targetX - 15, s.targetY - 15, 30, 30);
+      ctx.fillStyle = "#e6a1ff";
+      ctx.fillRect(s.targetX - 10, s.targetY - 10, 20, 20);
+    }
+  }
+}
+
 function drawBullet(b){
   if(b.owner==="undyne_spear"){
     ctx.fillStyle = "#00ffff";
@@ -889,9 +1012,10 @@ function drawBullet(b){
 }
 
 function drawBoss(b){
-  if(b.type === "undyne") ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
-  else if(b.type === "asgore") ctx.fillStyle = "#ffaa00";
-  else if(b.type === "sans") ctx.fillStyle = "#ffffff";
+  if(b.type === "toriel") ctx.fillStyle = "#ffaa00";
+  else if(b.type === "papyrus") ctx.fillStyle = "#ffffff";
+  else if(b.type === "undyne") ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
+  else if(b.type === "sans") ctx.fillStyle = "#0066ff";
   else if(b.type === "asriel") ctx.fillStyle = "#e6a1ff";
 
   ctx.fillRect(b.x+8,b.y+5,b.w-16,b.h-10);
@@ -948,6 +1072,7 @@ function draw(){
   }else{
     drawHUD();
     drawLasers();
+    drawSabres();
     for(const e of game.enemies) drawEnemy(e);
     if(game.boss) drawBoss(game.boss);
     for(const b of game.bullets) drawBullet(b);
