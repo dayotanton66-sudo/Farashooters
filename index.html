@@ -73,8 +73,6 @@ const game = {
   enemyDir: 1,
   enemyMoveTimer: 0,
   enemyDrop: 7,
-  enemyShootTimer: 0,
-  nextEnemyShootInterval: 1000,
   stageClearTimer: 0,
   invulnerableUntil: 0,
   message: "",
@@ -182,15 +180,20 @@ function spawnCurrentStage(){
   }
 }
 
+function getRandomEnemyInterval(){
+  const difficulty = getSpeedMultiplier();
+  const minInterval = Math.max(800, 2500 / difficulty);
+  const maxInterval = Math.max(2500, 7000 / difficulty);
+  return minInterval + Math.random() * (maxInterval - minInterval);
+}
+
 function spawnStage(){
   game.enemies=[];
   game.bullets=[];
   game.boss=null;
   game.enemyDir=1;
   game.enemyMoveTimer=0;
-  game.enemyShootTimer=0;
   game.stageClearTimer=0;
-  game.nextEnemyShootInterval = 800 + Math.random() * 600;
 
   const rows = Math.min(2 + Math.floor((game.stage-1)/2), 4);
   const cols = Math.min(6 + Math.floor((game.stage-1)/3), 8);
@@ -204,7 +207,9 @@ function spawnStage(){
         x:startX+c*gapX,
         y:startY+r*gapY,
         w:20,h:15,
-        alive:true
+        alive:true,
+        shootTimer: Math.random() * 1000,
+        nextShootInterval: getRandomEnemyInterval()
       });
     }
   }
@@ -256,7 +261,6 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  // 0.5 Second (500ms) Cooldown Interval
   if(now - game.lastPlayerShootTime < 500) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 4){
@@ -271,29 +275,26 @@ function shoot(){
   }
 }
 
-function enemyShoot(){
-  const alive=game.enemies.filter(e=>e.alive);
-  if(!alive.length) return;
+function updateEnemies(dt){
+  const speed = getSpeedMultiplier();
 
-  const speed=getSpeedMultiplier();
-  const bulletCount = Math.min(game.stage, alive.length);
-  const shuffled = [...alive].sort(()=>Math.random()-0.5);
+  for(const e of game.enemies){
+    if(!e.alive) continue;
 
-  for(let i=0; i<bulletCount; i++){
-    const e = shuffled[i];
-    game.bullets.push({
-      x:e.x+10,
-      y:e.y+14,
-      vx:0,
-      vy:2.2*speed,
-      owner:"enemy"
-    });
+    e.shootTimer += dt;
+    if(e.shootTimer >= e.nextShootInterval){
+      e.shootTimer = 0;
+      e.nextShootInterval = getRandomEnemyInterval();
+
+      game.bullets.push({
+        x: e.x + 10,
+        y: e.y + 14,
+        vx: 0,
+        vy: 2.2 * speed,
+        owner: "enemy"
+      });
+    }
   }
-
-  // Set randomized variable interval for next enemy burst
-  const difficulty = getSpeedMultiplier();
-  const baseDelay = Math.max(250, 1200 / difficulty);
-  game.nextEnemyShootInterval = baseDelay + (Math.random() * 400);
 }
 
 function bossShoot(){
@@ -305,9 +306,8 @@ function bossShoot(){
   const centerY = b.y + b.h / 2;
   let baseDelay = 400;
 
-  // Integrated Asgore-Inspired Multi-Pattern Sequence
   switch(b.attackPattern % 3){
-    case 0: // Rotating Dual Spiral Wave
+    case 0:
       const spiralBullets = 6;
       for(let i = 0; i < spiralBullets; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
@@ -320,10 +320,10 @@ function bossShoot(){
         });
       }
       b.spiralAngle += 0.28;
-      baseDelay = 220 / speed; // Rapid burst pattern
+      baseDelay = 220 / speed;
       break;
 
-    case 1: // Targeted Triple-Flame Fan
+    case 1:
       const px = game.playerX + 8;
       const py = game.playerY + 6;
       const angleToPlayer = Math.atan2(py - centerY, px - centerX);
@@ -339,10 +339,10 @@ function bossShoot(){
           owner: "boss"
         });
       }
-      baseDelay = 650 / speed; // Slower, direct targeted strikes
+      baseDelay = 650 / speed;
       break;
 
-    case 2: // Expanding Ring Wall Attack
+    case 2:
       const ringBullets = 12;
       for(let i = 0; i < ringBullets; i++){
         const angle = i * (Math.PI * 2 / ringBullets);
@@ -354,7 +354,7 @@ function bossShoot(){
           owner: "boss"
         });
       }
-      baseDelay = 950 / speed; // Big burst ring delay
+      baseDelay = 950 / speed;
       break;
   }
 
@@ -364,7 +364,6 @@ function bossShoot(){
     b.attackPattern++;
   }
 
-  // Randomize upcoming shot timing based on active pattern delay
   game.nextBossShootInterval = baseDelay + (Math.random() * 200);
 }
 
@@ -396,7 +395,6 @@ function update(dt){
   const difficulty=getSpeedMultiplier();
 
   game.enemyMoveTimer += dt;
-  game.enemyShootTimer += dt;
 
   if(game.boss){
     const b=game.boss;
@@ -493,10 +491,7 @@ function update(dt){
     }
   }
 
-  if(game.enemyShootTimer >= game.nextEnemyShootInterval){
-    game.enemyShootTimer = 0;
-    enemyShoot();
-  }
+  updateEnemies(dt);
 
   for(const b of game.bullets){
     b.x += (b.vx || 0) * speedScale;
