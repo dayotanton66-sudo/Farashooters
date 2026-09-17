@@ -246,8 +246,8 @@ const game = {
   score: 0,
   lives: 3,
   stage: 1,
-  playerX: W / 2 - 8,
-  playerY: H - 28,
+  playerX: W / 2 - 5,
+  playerY: H - 24,
   playerSpeed: 0.16,
   lastPlayerShootTime: 0,
   bullets: [],
@@ -353,7 +353,7 @@ function resetGame(){
   game.score=0;
   game.lives = game.difficultyIdx === 0 ? 5 : game.difficultyIdx === 3 ? 2 : 3;
   game.stage=1;
-  game.playerX=W/2-8;
+  game.playerX=W/2-5;
   game.lastPlayerShootTime=0;
   game.bullets=[];
   game.minions=[];
@@ -489,7 +489,7 @@ function shoot(){
 
   if(game.bullets.filter(b=>b.owner==="player").length < 10){
     game.bullets.push({
-      x:game.playerX+8,
+      x:game.playerX+5,
       y:game.playerY,
       vx:0,
       vy:-0.32,
@@ -512,8 +512,7 @@ function bossShoot(){
   if(b.type === "undyne"){
     const speedMult = b.isImmortal ? 1.4 : 1.0;
     let offsets = [-0.05, 0, 0.05];
-    
-    // Expand spear density based on difficulty
+
     if(game.difficultyIdx === 2) offsets = [-0.08, -0.04, 0, 0.04, 0.08];
     if(game.difficultyIdx === 3) offsets = [-0.12, -0.08, -0.04, 0, 0.04, 0.08, 0.12];
 
@@ -554,7 +553,7 @@ function bossShoot(){
       }
       baseDelay = 180 * diff.delayMult;
     } else {
-      const px = game.playerX + 8, py = game.playerY + 6;
+      const px = game.playerX + 5, py = game.playerY + 4;
       const angle = Math.atan2(py - centerY, px - centerX);
       const offsets = game.difficultyIdx === 3 ? [-0.4, -0.2, 0, 0.2, 0.4] : [-0.2, 0, 0.2];
       for(let offset of offsets){
@@ -661,13 +660,13 @@ function hit(a,b){
          a.y < b.y+b.h && a.y+a.h > b.y;
 }
 
-// Precise hitbox
+// Centered Hitbox (Ignores outer wing tips)
 function getPlayerHitbox(){
   return {
-    x: game.playerX + 4,
+    x: game.playerX + 3,
     y: game.playerY + 2,
-    w: 8,
-    h: 8
+    w: 4,
+    h: 4
   };
 }
 
@@ -677,7 +676,7 @@ function loseLife(){
   game.lives--;
   sfx.damage();
   game.invulnerableUntil=now+1200;
-  game.playerX=W/2-8;
+  game.playerX=W/2-5;
   game.bullets=game.bullets.filter(b=>b.owner==="player");
   game.message="HIT! LIVES: " + game.lives;
   game.messageUntil=now+900;
@@ -770,7 +769,7 @@ function update(dt){
 
   if(inputs.left) game.playerX -= game.playerSpeed * dt;
   if(inputs.right) game.playerX += game.playerSpeed * dt;
-  game.playerX = Math.max(0, Math.min(W - 16, game.playerX));
+  game.playerX = Math.max(0, Math.min(W - 10, game.playerX));
 
   if(game.boss){
     const b=game.boss;
@@ -970,18 +969,22 @@ function drawPlayer(){
   const flashing=performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0;
   if(flashing) return;
   const x=game.playerX,y=game.playerY;
+
+  // Reduced player size visual drawing (10px wide, 8px tall)
   ctx.fillStyle="#70e8ff";
   ctx.beginPath();
-  ctx.moveTo(x+8,y);
-  ctx.lineTo(x+16,y+12);
-  ctx.lineTo(x+11,y+10);
-  ctx.lineTo(x+8,y+12);
-  ctx.lineTo(x+5,y+10);
-  ctx.lineTo(x,y+12);
+  ctx.moveTo(x+5, y);
+  ctx.lineTo(x+10, y+8);
+  ctx.lineTo(x+7, y+6);
+  ctx.lineTo(x+5, y+8);
+  ctx.lineTo(x+3, y+6);
+  ctx.lineTo(x, y+8);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle="#fff";
-  ctx.fillRect(x+7,y+4,2,4);
+
+  // Core hitbox visual indicator (bright red central pixel)
+  ctx.fillStyle="#ff2255";
+  ctx.fillRect(x+4, y+3, 2, 2);
 }
 
 function drawEnemy(x,y){
