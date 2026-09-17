@@ -23,45 +23,26 @@ button:active{transform:scale(.97);background:#263752}
 
 /* Fullscreen Mobile Landscape Optimization */
 :fullscreen body, :-webkit-full-screen body {
-  padding: 0;
-  margin: 0;
-  background: #000;
+  padding: 0; margin: 0; background: #000;
 }
 :fullscreen #app, :-webkit-full-screen #app {
-  width: 100vw;
-  height: 100vh;
-  max-width: 100vw;
-  padding: 4px 10px;
-  justify-content: space-between;
+  width: 100vw; height: 100vh; max-width: 100vw; padding: 4px 10px; justify-content: space-between;
 }
 :fullscreen h1, :fullscreen #status, :fullscreen .hint, :fullscreen #log, :fullscreen .row,
 :-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen .row {
   display: none;
 }
 :fullscreen #screenWrap, :-webkit-full-screen #screenWrap {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 0;
+  flex: 1; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; min-height: 0;
 }
 :fullscreen canvas, :-webkit-full-screen canvas {
-  height: 100%;
-  width: auto;
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 4px;
+  height: 100%; width: auto; max-width: 100%; max-height: 100%; border-radius: 4px;
 }
 :fullscreen .controls, :-webkit-full-screen .controls {
-  margin-top: 4px;
-  height: 50px;
-  max-width: 100%;
+  margin-top: 4px; height: 50px; max-width: 100%;
 }
 :fullscreen .controls button, :-webkit-full-screen .controls button {
-  padding: 6px;
-  font-size: 24px;
+  padding: 6px; font-size: 24px;
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
@@ -143,16 +124,12 @@ function playSynthNote(freq, type, duration, volume){
   if(freq <= 0 || !audioCtx) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-
   gain.gain.setValueAtTime(volume, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-
   osc.connect(gain);
   gain.connect(audioCtx.destination);
-
   osc.start();
   osc.stop(audioCtx.currentTime + duration);
 }
@@ -242,11 +219,11 @@ const DIFFICULTIES = [
 
 const game = {
   screen: "menu",
-  difficultyIdx: 1, // Default Normal
+  difficultyIdx: 1,
   score: 0,
   lives: 3,
   stage: 1,
-  cannons: 1, // Upgradeable Cannon Count
+  cannons: 1,
   playerX: W / 2 - 5,
   playerY: H - 24,
   playerSpeed: 0.16,
@@ -255,6 +232,7 @@ const game = {
   enemies: [],
   minions: [],
   swords: [],
+  lasers: [],
   enemyDir: 1,
   stageClearTimer: 0,
   invulnerableUntil: 0,
@@ -360,6 +338,7 @@ function resetGame(){
   game.bullets=[];
   game.minions=[];
   game.swords=[];
+  game.lasers=[];
   game.invulnerableUntil=0;
   game.message="STAGE 1 (" + DIFFICULTIES[game.difficultyIdx].name + ")";
   game.messageUntil=performance.now()+1200;
@@ -377,6 +356,7 @@ function getSpeedMultiplier(){
 function spawnCurrentStage(){
   game.minions = [];
   game.swords = [];
+  game.lasers = [];
   if(game.stage === 5 || game.stage === 10 || game.stage === 15 || game.stage >= 20){
     spawnBoss();
   }else{
@@ -406,12 +386,32 @@ function spawnStage(){
   const startX=(W-(cols-1)*gapX)/2-10;
   const startY=35;
 
+  const hasSpecialEnemies = game.stage > 5;
+
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
+      let type = "standard";
+      let hp = 1;
+
+      if(hasSpecialEnemies){
+        const rand = Math.random();
+        if(rand < 0.20){
+          type = "tank";
+          hp = 4;
+        } else if(rand < 0.40){
+          type = "flash";
+        } else if(rand < 0.60){
+          type = "spread";
+        }
+      }
+
       game.enemies.push({
         x:startX+c*gapX,
         y:startY+r*gapY,
         w:20,h:15,
+        type: type,
+        hp: hp,
+        maxHp: hp,
         alive:true,
         shootTimer: Math.random() * 1000,
         nextShootInterval: getRandomEnemyInterval()
@@ -427,29 +427,31 @@ function spawnBoss(){
   game.enemies=[];
   game.bullets=[];
   game.swords=[];
+  game.lasers=[];
   game.stageClearTimer=0;
   game.bossMoveTimer=0;
   game.bossShootTimer=0;
 
-  let hp = 40;
+  let baseHp = 40;
   let type = "undyne";
   let title = "UNDYNE THE UNDYING";
 
   if(game.stage === 10){
-    hp = 80;
+    baseHp = 80;
     type = "asgore";
     title = "ASGORE";
   } else if(game.stage === 15){
-    hp = 120;
+    baseHp = 120;
     type = "sans";
     title = "SANS";
   } else if(game.stage >= 20){
-    hp = 180;
+    baseHp = 180;
     type = "asriel";
     title = "ASRIEL - GOD OF HYPERDEATH";
   }
 
-  // Scale HP for Bullet Hell
+  // Dynamic HP scaling based on cannons player currently possesses
+  let hp = Math.floor(baseHp * (1 + 0.3 * (game.cannons - 1)));
   if(game.difficultyIdx === 3) hp = Math.floor(hp * 1.3);
 
   game.boss={
@@ -493,7 +495,6 @@ function shoot(){
     const cx = game.playerX + 5;
     const cy = game.playerY;
 
-    // Upgraded multi-cannon shooting logic
     if(game.cannons === 1){
       game.bullets.push({ x: cx, y: cy, vx: 0, vy: -0.32, owner: "player" });
     } else if(game.cannons === 2){
@@ -508,7 +509,6 @@ function shoot(){
         { x: cx + 4, y: cy, vx: 0.05, vy: -0.31, owner: "player" }
       );
     } else {
-      // 4 or more cannons: spread pattern
       game.bullets.push(
         { x: cx - 6, y: cy, vx: -0.09, vy: -0.30, owner: "player" },
         { x: cx - 3, y: cy, vx: -0.04, vy: -0.32, owner: "player" },
@@ -533,122 +533,35 @@ function bossShoot(){
   let baseDelay = 400 * diff.delayMult;
 
   if(b.type === "undyne"){
-    const speedMult = b.isImmortal ? 1.4 : 1.0;
-    let offsets = [-0.05, 0, 0.05];
+    const mode = b.attackPattern % 3;
 
-    if(game.difficultyIdx === 2) offsets = [-0.08, -0.04, 0, 0.04, 0.08];
-    if(game.difficultyIdx === 3) offsets = [-0.12, -0.08, -0.04, 0, 0.04, 0.08, 0.12];
-
-    for(const vx of offsets){
-      game.bullets.push({
-        x: centerX,
-        y: b.y + b.h,
-        vx: vx * speed * speedMult,
-        vy: 0.24 * speed * speedMult,
-        owner: "undyne_spear",
-        w: 8,
-        h: 20
-      });
-    }
-
-    baseDelay = (b.isImmortal ? 220 : 350) * diff.delayMult;
-    b.patternTimer++;
-    if(b.patternTimer > 6){ b.patternTimer = 0; b.attackPattern++; }
-  }
-
-  else if(b.type === "asgore"){
-    if(b.hp < b.maxHp * 0.5 && b.spiralCycleCount < 5){
-      const numRays = game.difficultyIdx === 3 ? 20 : 12;
-      for(let i=0; i<numRays; i++){
-        const angle = b.spiralAngle + (i * (Math.PI * 2 / numRays));
+    if(mode === 0){
+      // Spear Cascade
+      const offsets = game.difficultyIdx >= 2 ? [-0.1, -0.05, 0, 0.05, 0.1] : [-0.06, 0, 0.06];
+      for(const vx of offsets){
         game.bullets.push({
-          x: W / 2, y: H / 3,
-          vx: Math.cos(angle) * 0.08 * speed,
-          vy: Math.sin(angle) * 0.08 * speed,
-          owner: "boss"
+          x: centerX, y: b.y + b.h,
+          vx: vx * speed, vy: 0.25 * speed,
+          owner: "undyne_spear"
         });
       }
-      b.spiralAngle += 0.25;
-      b.patternTimer++;
-      if(b.patternTimer > 8){
-        b.patternTimer = 0;
-        b.spiralCycleCount++;
+      baseDelay = 280 * diff.delayMult;
+    } else if(mode === 1){
+      // Targeted Spear Trap around Player
+      const px = game.playerX + 5;
+      const targetOffsets = [-28, -14, 14, 28];
+      for(let offset of targetOffsets){
+        game.bullets.push({
+          x: px + offset, y: 10,
+          vx: 0, vy: 0.28 * speed,
+          owner: "undyne_spear"
+        });
       }
-      baseDelay = 180 * diff.delayMult;
+      baseDelay = 450 * diff.delayMult;
     } else {
-      const px = game.playerX + 5, py = game.playerY + 4;
-      const angle = Math.atan2(py - centerY, px - centerX);
-      const offsets = game.difficultyIdx === 3 ? [-0.4, -0.2, 0, 0.2, 0.4] : [-0.2, 0, 0.2];
-      for(let offset of offsets){
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle + offset) * 0.1 * speed,
-          vy: Math.sin(angle + offset) * 0.1 * speed,
-          owner: "boss"
-        });
-      }
-      baseDelay = 500 * diff.delayMult;
-      b.attackPattern++;
-    }
-  }
-
-  else if(b.type === "sans"){
-    if(b.attackPattern % 3 === 0){
-      const count = game.difficultyIdx === 3 ? 5 : 2;
-      for(let i = -count; i <= count; i++){
-        game.bullets.push({
-          x: centerX + i * 12, y: b.y + b.h,
-          vx: i * 0.03, vy: 0.18 * speed,
-          owner: "boss"
-        });
-      }
-      baseDelay = 300 * diff.delayMult;
-    } else if(b.attackPattern % 3 === 1){
-      const gapIndex = Math.floor(Math.random() * 8);
-      for(let i=0; i<10; i++){
-        if(i !== gapIndex && (game.difficultyIdx < 2 || i !== gapIndex + 1)){
-          game.bullets.push({
-            x: i * 32 + 16, y: b.y + b.h,
-            vx: 0, vy: 0.11 * speed,
-            owner: "boss"
-          });
-        }
-      }
-      baseDelay = 600 * diff.delayMult;
-    } else {
-      const numRays = game.difficultyIdx === 3 ? 4 : 1;
-      for(let i=0; i<numRays; i++){
-        const angle = Math.random() * Math.PI * 2;
-        game.bullets.push({
-          x: centerX, y: centerY,
-          vx: Math.cos(angle) * 0.14 * speed,
-          vy: Math.sin(angle) * 0.14 * speed,
-          owner: "boss"
-        });
-      }
-      baseDelay = 220 * diff.delayMult;
-    }
-    b.patternTimer++;
-    if(b.patternTimer > 5){ b.patternTimer = 0; b.attackPattern++; }
-  }
-
-  else if(b.type === "asriel"){
-    if(b.attackPattern % 2 === 0){
-      const drops = game.difficultyIdx === 3 ? 6 : 3;
-      for(let i = 0; i < drops; i++){
-        const dropX = Math.random() * (W - 20) + 10;
-        game.bullets.push({
-          x: dropX, y: 10,
-          vx: (Math.random() - 0.5) * 0.04,
-          vy: 0.12 * speed,
-          owner: "asriel_star"
-        });
-      }
-      baseDelay = 320 * diff.delayMult;
-    } else {
-      const numRays = game.difficultyIdx === 3 ? 16 : 10;
-      for(let i=0; i<numRays; i++){
-        const angle = (i / numRays) * Math.PI + Math.PI * 0.1;
+      // Ring burst
+      for(let a = 0; a < 8; a++){
+        const angle = (a / 8) * Math.PI * 2;
         game.bullets.push({
           x: centerX, y: centerY,
           vx: Math.cos(angle) * 0.12 * speed,
@@ -656,23 +569,132 @@ function bossShoot(){
           owner: "boss"
         });
       }
-      baseDelay = 420 * diff.delayMult;
+      baseDelay = 380 * diff.delayMult;
     }
 
-    if(b.phase2Spawned && game.swords.length > 0){
-      for(const sword of game.swords){
-        const angle = Math.atan2(game.playerY - sword.y, game.playerX - sword.x);
+    b.patternTimer++;
+    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
+  }
+
+  else if(b.type === "asgore"){
+    const mode = b.attackPattern % 2;
+
+    if(mode === 0){
+      // Trident Wave
+      const px = game.playerX + 5;
+      const angle = Math.atan2(game.playerY - centerY, px - centerX);
+      const offsets = [-0.3, -0.15, 0, 0.15, 0.3];
+      for(let offset of offsets){
         game.bullets.push({
-          x: sword.x, y: sword.y,
-          vx: Math.cos(angle) * 0.14 * speed,
-          vy: Math.sin(angle) * 0.14 * speed,
+          x: centerX, y: centerY,
+          vx: Math.cos(angle + offset) * 0.12 * speed,
+          vy: Math.sin(angle + offset) * 0.12 * speed,
           owner: "boss"
         });
       }
+      baseDelay = 480 * diff.delayMult;
+    } else {
+      // Spiral Hell
+      const numRays = 12;
+      for(let i=0; i<numRays; i++){
+        const angle = b.spiralAngle + (i * (Math.PI * 2 / numRays));
+        game.bullets.push({
+          x: centerX, y: centerY,
+          vx: Math.cos(angle) * 0.09 * speed,
+          vy: Math.sin(angle) * 0.09 * speed,
+          owner: "boss"
+        });
+      }
+      b.spiralAngle += 0.2;
+      baseDelay = 200 * diff.delayMult;
     }
 
     b.patternTimer++;
     if(b.patternTimer > 5){ b.patternTimer = 0; b.attackPattern++; }
+  }
+
+  else if(b.type === "sans"){
+    const mode = b.attackPattern % 3;
+
+    if(mode === 0){
+      // Bone Wall with Gap
+      const gapIndex = Math.floor(Math.random() * 8);
+      for(let i=0; i<10; i++){
+        if(i !== gapIndex){
+          game.bullets.push({
+            x: i * 32 + 16, y: b.y + b.h,
+            vx: 0, vy: 0.12 * speed,
+            owner: "boss"
+          });
+        }
+      }
+      baseDelay = 550 * diff.delayMult;
+    } else if(mode === 1){
+      // Gaster Blaster Beam (Vertical Laser sweep across player position)
+      game.lasers.push({
+        x: game.playerX - 10,
+        y: 0,
+        w: 30,
+        h: H,
+        timer: 800,
+        warning: true
+      });
+      baseDelay = 700 * diff.delayMult;
+    } else {
+      // Chaos Burst
+      for(let i=0; i<6; i++){
+        const angle = Math.random() * Math.PI * 2;
+        game.bullets.push({
+          x: centerX, y: centerY,
+          vx: Math.cos(angle) * 0.15 * speed,
+          vy: Math.sin(angle) * 0.15 * speed,
+          owner: "boss"
+        });
+      }
+      baseDelay = 220 * diff.delayMult;
+    }
+
+    b.patternTimer++;
+    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
+  }
+
+  else if(b.type === "asriel"){
+    const mode = b.attackPattern % 3;
+
+    if(mode === 0){
+      // Hyper Goner Pull / Radial Shockwave
+      for(let i=0; i<14; i++){
+        const angle = (i / 14) * Math.PI * 2;
+        game.bullets.push({
+          x: centerX, y: centerY,
+          vx: Math.cos(angle) * 0.11 * speed,
+          vy: Math.sin(angle) * 0.11 * speed,
+          owner: "boss"
+        });
+      }
+      baseDelay = 380 * diff.delayMult;
+    } else if(mode === 1){
+      // Starfall
+      for(let i = 0; i < 4; i++){
+        game.bullets.push({
+          x: Math.random() * (W - 20) + 10, y: 10,
+          vx: (Math.random() - 0.5) * 0.05,
+          vy: 0.13 * speed,
+          owner: "asriel_star"
+        });
+      }
+      baseDelay = 300 * diff.delayMult;
+    } else {
+      // Dual Lasers on Flanks
+      game.lasers.push(
+        { x: 20, y: 0, w: 25, h: H, timer: 700, warning: true },
+        { x: W - 45, y: 0, w: 25, h: H, timer: 700, warning: true }
+      );
+      baseDelay = 650 * diff.delayMult;
+    }
+
+    b.patternTimer++;
+    if(b.patternTimer > 4){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   game.nextBossShootInterval = baseDelay;
@@ -683,7 +705,6 @@ function hit(a,b){
          a.y < b.y+b.h && a.y+a.h > b.y;
 }
 
-// Centered Hitbox (Ignores outer wing tips)
 function getPlayerHitbox(){
   return {
     x: game.playerX + 3,
@@ -698,7 +719,6 @@ function loseLife(){
   if(now < game.invulnerableUntil) return;
   game.lives--;
   sfx.damage();
-  // Undertale-Style I-Frames: 1.2 seconds of invulnerability
   game.invulnerableUntil=now+1200;
   game.message="HIT! LIVES: " + game.lives;
   game.messageUntil=now+900;
@@ -736,36 +756,49 @@ function updateEnemies(dt){
     if(e.shootTimer >= e.nextShootInterval){
       e.shootTimer = 0;
       e.nextShootInterval = getRandomEnemyInterval();
-      game.bullets.push({
-        x: e.x + 10, y: e.y + 14,
-        vx: 0, vy: 0.14 * speed,
-        owner: "enemy"
-      });
+
+      if(e.type === "flash"){
+        // High speed single bullet
+        game.bullets.push({
+          x: e.x + 10, y: e.y + 14,
+          vx: 0, vy: 0.28 * speed,
+          owner: "enemy"
+        });
+      } else if(e.type === "spread"){
+        // 3-bullet fan attack
+        game.bullets.push(
+          { x: e.x + 10, y: e.y + 14, vx: -0.06 * speed, vy: 0.14 * speed, owner: "enemy" },
+          { x: e.x + 10, y: e.y + 14, vx: 0, vy: 0.14 * speed, owner: "enemy" },
+          { x: e.x + 10, y: e.y + 14, vx: 0.06 * speed, vy: 0.14 * speed, owner: "enemy" }
+        );
+      } else {
+        // Standard or Tank slow attack
+        game.bullets.push({
+          x: e.x + 10, y: e.y + 14,
+          vx: 0, vy: 0.14 * speed,
+          owner: "enemy"
+        });
+      }
     }
   }
 }
 
-function updateMinions(dt){
-  for(const m of game.minions){
-    m.x += m.dir * 0.05 * dt;
-    if(m.x < 10 || m.x > W - 20) m.dir *= -1;
+function updateLasers(dt){
+  const pr = getPlayerHitbox();
+  for(let i = game.lasers.length - 1; i >= 0; i--){
+    const l = game.lasers[i];
+    l.timer -= dt;
 
-    m.shootTimer += dt;
-    if(m.shootTimer >= 1100 * DIFFICULTIES[game.difficultyIdx].delayMult){
-      m.shootTimer = 0;
-      game.bullets.push({
-        x: m.x + 6, y: m.y + 10,
-        vx: 0, vy: 0.12 * getSpeedMultiplier(),
-        owner: "enemy"
-      });
+    if(l.timer < 300) {
+      l.warning = false; // Active laser beam phase
+      if(hit(pr, { x: l.x, y: l.y, w: l.w, h: l.h })){
+        loseLife();
+      }
     }
-  }
-}
 
-function updateSwords(dt){
-  for(const s of game.swords){
-    s.y = s.baseY + Math.sin(performance.now() * 0.003 + s.offset) * 12;
-    s.x = s.baseX + Math.cos(performance.now() * 0.002 + s.offset) * 8;
+    if(l.timer <= 0){
+      game.lasers.splice(i, 1);
+    }
   }
 }
 
@@ -774,11 +807,11 @@ function killBoss(){
   game.bullets=[];
   game.minions=[];
   game.swords=[];
+  game.lasers=[];
   stopBossMusic();
   sfx.clear();
   game.stageClearTimer=performance.now()+1500;
 
-  // CANNON UPGRADE REWARD
   game.cannons++;
 
   if(game.stage >= 20){
@@ -795,6 +828,8 @@ function update(dt){
   if(inputs.left) game.playerX -= game.playerSpeed * dt;
   if(inputs.right) game.playerX += game.playerSpeed * dt;
   game.playerX = Math.max(0, Math.min(W - 10, game.playerX));
+
+  updateLasers(dt);
 
   if(game.boss){
     const b=game.boss;
@@ -817,34 +852,11 @@ function update(dt){
       }
     }
 
-    if(b.type === "sans" && b.hp < b.maxHp * 0.5 && !b.phase2Spawned){
-      b.phase2Spawned = true;
-      game.minions.push(
-        { x: W/4, y: 75, w: 12, h: 10, dir: 1, shootTimer: 0 },
-        { x: (W*3)/4, y: 75, w: 12, h: 10, dir: -1, shootTimer: 0 }
-      );
-      game.message = "ASSIST ALIENS SPAWNED!";
-      game.messageUntil = performance.now() + 1500;
-    }
-
-    if(b.type === "asriel" && b.hp < b.maxHp * 0.5 && !b.phase2Spawned){
-      b.phase2Spawned = true;
-      game.swords = [
-        { x: W / 4 - 10, y: 65, baseX: W / 4 - 10, baseY: 65, w: 12, h: 28, offset: 0 },
-        { x: (W * 3) / 4 + 10, y: 65, baseX: (W * 3) / 4 + 10, baseY: 65, w: 12, h: 28, offset: Math.PI }
-      ];
-      game.message = "CHAOS SABERS SUMMONED!";
-      game.messageUntil = performance.now() + 1500;
-    }
-
     game.bossShootTimer += dt;
     if(game.bossShootTimer >= game.nextBossShootInterval){
       game.bossShootTimer = 0;
       bossShoot();
     }
-
-    updateMinions(dt);
-    updateSwords(dt);
 
     for(const bullet of game.bullets){
       bullet.x += (bullet.vx || 0) * dt;
@@ -950,7 +962,14 @@ function update(dt){
     for(const e of game.enemies){
       if(!e.alive) continue;
       if(hit(br,e)){
-        e.alive=false; b.y=-30; game.score+=10; sfx.hit(); break;
+        bullet.y = -30;
+        e.hp--;
+        sfx.hit();
+        if(e.hp <= 0){
+          e.alive = false;
+          game.score += e.type === "tank" ? 40 : e.type === "standard" ? 10 : 20;
+        }
+        break;
       }
     }
   }
@@ -994,7 +1013,6 @@ function drawPlayer(){
   if(flashing) return;
   const x=game.playerX,y=game.playerY;
 
-  // Reduced player size visual drawing (10px wide, 8px tall)
   ctx.fillStyle="#70e8ff";
   ctx.beginPath();
   ctx.moveTo(x+5, y);
@@ -1006,7 +1024,6 @@ function drawPlayer(){
   ctx.closePath();
   ctx.fill();
 
-  // Draw visual cannons on the player craft based on upgrade level
   ctx.fillStyle="#ffff55";
   if(game.cannons >= 2){
     ctx.fillRect(x, y+3, 1, 3);
@@ -1016,44 +1033,70 @@ function drawPlayer(){
     ctx.fillRect(x+4, y-1, 2, 2);
   }
 
-  // Core hitbox visual indicator (bright red central pixel)
   ctx.fillStyle="#ff2255";
   ctx.fillRect(x+4, y+3, 2, 2);
 }
 
-function drawEnemy(x,y){
-  ctx.fillStyle="#ff647c";
-  ctx.fillRect(x+4,y,12,3);
-  ctx.fillRect(x+2,y+3,16,8);
-  ctx.fillRect(x,y+6,4,5);
-  ctx.fillRect(x+16,y+6,4,5);
-  ctx.fillRect(x+5,y+11,3,4);
-  ctx.fillRect(x+12,y+11,3,4);
-  ctx.fillStyle="#050814";
-  ctx.fillRect(x+5,y+5,3,3);
-  ctx.fillRect(x+12,y+5,3,3);
-}
+function drawEnemy(e){
+  const x = e.x, y = e.y;
 
-function drawMinions(){
-  for(const m of game.minions){
-    ctx.fillStyle="#00ffcc";
-    ctx.fillRect(m.x, m.y, m.w, m.h);
+  if(e.type === "tank"){
+    // Heavy Armor Tank (Dark Gray & Orange)
+    ctx.fillStyle = "#8899a6";
+    ctx.fillRect(x+1, y, 18, 14);
+    ctx.fillStyle = "#ff6600";
+    ctx.fillRect(x+4, y+3, 12, 8);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x+7, y-2, 6, 4); // Heavy Cannon Top
+  } else if(e.type === "flash"){
+    // Flash Shooter (Bright Speed Red)
+    ctx.fillStyle = "#ff2255";
+    ctx.fillRect(x+2, y+2, 16, 10);
+    ctx.fillStyle = "#ffff00";
+    ctx.fillRect(x+8, y+8, 4, 7);
+  } else if(e.type === "spread"){
+    // Spread Shooter (Purple Triple Barrel)
+    ctx.fillStyle = "#aa00ff";
+    ctx.fillRect(x, y+3, 20, 8);
+    ctx.fillStyle = "#00ffff";
+    ctx.fillRect(x+2, y+11, 3, 4);
+    ctx.fillRect(x+8, y+11, 4, 4);
+    ctx.fillRect(x+15, y+11, 3, 4);
+  } else {
+    // Standard Enemy
+    ctx.fillStyle="#ff647c";
+    ctx.fillRect(x+4,y,12,3);
+    ctx.fillRect(x+2,y+3,16,8);
+    ctx.fillRect(x,y+6,4,5);
+    ctx.fillRect(x+16,y+6,4,5);
+    ctx.fillRect(x+5,y+11,3,4);
+    ctx.fillRect(x+12,y+11,3,4);
+    ctx.fillStyle="#050814";
+    ctx.fillRect(x+5,y+5,3,3);
+    ctx.fillRect(x+12,y+5,3,3);
+  }
+
+  // Draw HP Bar for Tanks
+  if(e.type === "tank" && e.hp < e.maxHp){
+    ctx.fillStyle="#333";
+    ctx.fillRect(x, y-5, 20, 2);
+    ctx.fillStyle="#00ff66";
+    ctx.fillRect(x, y-5, 20 * (e.hp / e.maxHp), 2);
   }
 }
 
-function drawSwords(){
-  for(const s of game.swords){
-    ctx.fillStyle="#ff2255";
-    ctx.beginPath();
-    ctx.moveTo(s.x + s.w / 2, s.y);
-    ctx.lineTo(s.x + s.w, s.y + s.h * 0.7);
-    ctx.lineTo(s.x + s.w * 0.7, s.y + s.h * 0.7);
-    ctx.lineTo(s.x + s.w * 0.7, s.y + s.h);
-    ctx.lineTo(s.x + s.w * 0.3, s.y + s.h);
-    ctx.lineTo(s.x + s.w * 0.3, s.y + s.h * 0.7);
-    ctx.lineTo(s.x, s.y + s.h * 0.7);
-    ctx.closePath();
-    ctx.fill();
+function drawLasers(){
+  for(const l of game.lasers){
+    if(l.warning){
+      ctx.fillStyle = "rgba(255, 0, 0, 0.25)";
+      ctx.fillRect(l.x, l.y, l.w, l.h);
+      text("WARNING!", l.x + l.w/2, 120, 9, "center", "#ff3355");
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(l.x, l.y, l.w, l.h);
+      ctx.fillStyle = "#00ffff";
+      ctx.fillRect(l.x + 3, l.y, l.w - 6, l.h);
+    }
   }
 }
 
@@ -1156,9 +1199,8 @@ function draw(){
     text("PRESS SHOOT TO START",160,225,11,"center","#ffffff");
   }else{
     drawHUD();
-    for(const e of game.enemies) drawEnemy(e.x,e.y);
-    drawMinions();
-    drawSwords();
+    drawLasers();
+    for(const e of game.enemies) drawEnemy(e);
     if(game.boss) drawBoss(game.boss);
     for(const b of game.bullets) drawBullet(b);
     drawPlayer();
