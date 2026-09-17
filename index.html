@@ -233,8 +233,16 @@ function stopBossMusic(){
 
 const inputs = { left: false, right: false };
 
+const DIFFICULTIES = [
+  { name: "EASY", speedMult: 0.7, bulletMult: 0.7, delayMult: 1.4 },
+  { name: "NORMAL", speedMult: 1.0, bulletMult: 1.0, delayMult: 1.0 },
+  { name: "HARD", speedMult: 1.35, bulletMult: 1.3, delayMult: 0.75 },
+  { name: "BULLET HELL", speedMult: 1.7, bulletMult: 2.2, delayMult: 0.45 }
+];
+
 const game = {
   screen: "menu",
+  difficultyIdx: 1, // Default Normal
   score: 0,
   lives: 3,
   stage: 1,
@@ -312,8 +320,20 @@ async function readLoop(){
       buffer = lines.pop() || "";
       for(const raw of lines){
         const cmd = raw.trim().toUpperCase();
-        if(cmd==="LEFT"){ inputs.left = true; inputs.right = false; }
-        else if(cmd==="RIGHT"){ inputs.right = true; inputs.left = false; }
+        if(cmd==="LEFT"){ 
+          if(game.screen === "menu"){
+            game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+          } else {
+            inputs.left = true; inputs.right = false; 
+          }
+        }
+        else if(cmd==="RIGHT"){ 
+          if(game.screen === "menu"){
+            game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+          } else {
+            inputs.right = true; inputs.left = false; 
+          }
+        }
         else if(cmd==="RELEASE"){ inputs.left = false; inputs.right = false; }
         else if(cmd==="SHOOT") shoot();
       }
@@ -331,7 +351,7 @@ function resetGame(){
   stopBossMusic();
   game.screen="playing";
   game.score=0;
-  game.lives=3;
+  game.lives = game.difficultyIdx === 0 ? 5 : game.difficultyIdx === 3 ? 2 : 3;
   game.stage=1;
   game.playerX=W/2-8;
   game.lastPlayerShootTime=0;
@@ -339,7 +359,7 @@ function resetGame(){
   game.minions=[];
   game.swords=[];
   game.invulnerableUntil=0;
-  game.message="STAGE 1";
+  game.message="STAGE 1 (" + DIFFICULTIES[game.difficultyIdx].name + ")";
   game.messageUntil=performance.now()+1200;
   game.boss=null;
   game.bossMoveTimer=0;
@@ -348,7 +368,8 @@ function resetGame(){
 }
 
 function getSpeedMultiplier(){
-  return Math.pow(1.03, game.stage - 1);
+  const diff = DIFFICULTIES[game.difficultyIdx];
+  return Math.pow(1.03, game.stage - 1) * diff.speedMult;
 }
 
 function spawnCurrentStage(){
@@ -363,9 +384,10 @@ function spawnCurrentStage(){
 }
 
 function getRandomEnemyInterval(){
+  const diff = DIFFICULTIES[game.difficultyIdx];
   const difficulty = getSpeedMultiplier();
-  const minInterval = Math.max(800, 2500 / difficulty);
-  const maxInterval = Math.max(2500, 7000 / difficulty);
+  const minInterval = Math.max(400, (2500 / difficulty) * diff.delayMult);
+  const maxInterval = Math.max(1200, (7000 / difficulty) * diff.delayMult);
   return minInterval + Math.random() * (maxInterval - minInterval);
 }
 
@@ -425,6 +447,9 @@ function spawnBoss(){
     title = "ASRIEL - GOD OF HYPERDEATH";
   }
 
+  // Scale HP for Bullet Hell
+  if(game.difficultyIdx === 3) hp = Math.floor(hp * 1.3);
+
   game.boss={
     type: type,
     x:W/2-32,
@@ -444,7 +469,7 @@ function spawnBoss(){
     phase2Spawned: false
   };
 
-  game.nextBossShootInterval = 400;
+  game.nextBossShootInterval = 400 * DIFFICULTIES[game.difficultyIdx].delayMult;
   game.message="STAGE " + game.stage + " • " + title;
   game.messageUntil=performance.now()+1800;
 
@@ -479,15 +504,19 @@ function bossShoot(){
   if(!game.boss) return;
   const b = game.boss;
   const speed = getSpeedMultiplier();
+  const diff = DIFFICULTIES[game.difficultyIdx];
   const centerX = b.x + b.w / 2;
   const centerY = b.y + b.h / 2;
-  let baseDelay = 400;
+  let baseDelay = 400 * diff.delayMult;
 
   if(b.type === "undyne"){
     const speedMult = b.isImmortal ? 1.4 : 1.0;
+    let offsets = [-0.05, 0, 0.05];
     
-    // Updated Undyne Attack: Fires 3 spears spreading downwards
-    const offsets = [-0.05, 0, 0.05];
+    // Expand spear density based on difficulty
+    if(game.difficultyIdx === 2) offsets = [-0.08, -0.04, 0, 0.04, 0.08];
+    if(game.difficultyIdx === 3) offsets = [-0.12, -0.08, -0.04, 0, 0.04, 0.08, 0.12];
+
     for(const vx of offsets){
       game.bullets.push({
         x: centerX,
@@ -500,14 +529,14 @@ function bossShoot(){
       });
     }
 
-    baseDelay = b.isImmortal ? 260 : 380;
+    baseDelay = (b.isImmortal ? 220 : 350) * diff.delayMult;
     b.patternTimer++;
     if(b.patternTimer > 6){ b.patternTimer = 0; b.attackPattern++; }
   }
 
   else if(b.type === "asgore"){
     if(b.hp < b.maxHp * 0.5 && b.spiralCycleCount < 5){
-      const numRays = 12;
+      const numRays = game.difficultyIdx === 3 ? 20 : 12;
       for(let i=0; i<numRays; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / numRays));
         game.bullets.push({
@@ -523,11 +552,12 @@ function bossShoot(){
         b.patternTimer = 0;
         b.spiralCycleCount++;
       }
-      baseDelay = 200;
+      baseDelay = 180 * diff.delayMult;
     } else {
       const px = game.playerX + 8, py = game.playerY + 6;
       const angle = Math.atan2(py - centerY, px - centerX);
-      for(let offset of [-0.2, 0, 0.2]){
+      const offsets = game.difficultyIdx === 3 ? [-0.4, -0.2, 0, 0.2, 0.4] : [-0.2, 0, 0.2];
+      for(let offset of offsets){
         game.bullets.push({
           x: centerX, y: centerY,
           vx: Math.cos(angle + offset) * 0.1 * speed,
@@ -535,25 +565,26 @@ function bossShoot(){
           owner: "boss"
         });
       }
-      baseDelay = 550;
+      baseDelay = 500 * diff.delayMult;
       b.attackPattern++;
     }
   }
 
   else if(b.type === "sans"){
     if(b.attackPattern % 3 === 0){
-      for(let i = -2; i <= 2; i++){
+      const count = game.difficultyIdx === 3 ? 5 : 2;
+      for(let i = -count; i <= count; i++){
         game.bullets.push({
-          x: centerX + i * 15, y: b.y + b.h,
+          x: centerX + i * 12, y: b.y + b.h,
           vx: i * 0.03, vy: 0.18 * speed,
           owner: "boss"
         });
       }
-      baseDelay = 350;
+      baseDelay = 300 * diff.delayMult;
     } else if(b.attackPattern % 3 === 1){
       const gapIndex = Math.floor(Math.random() * 8);
       for(let i=0; i<10; i++){
-        if(i !== gapIndex && i !== gapIndex + 1){
+        if(i !== gapIndex && (game.difficultyIdx < 2 || i !== gapIndex + 1)){
           game.bullets.push({
             x: i * 32 + 16, y: b.y + b.h,
             vx: 0, vy: 0.11 * speed,
@@ -561,16 +592,19 @@ function bossShoot(){
           });
         }
       }
-      baseDelay = 700;
+      baseDelay = 600 * diff.delayMult;
     } else {
-      const angle = Math.random() * Math.PI * 2;
-      game.bullets.push({
-        x: centerX, y: centerY,
-        vx: Math.cos(angle) * 0.14 * speed,
-        vy: Math.sin(angle) * 0.14 * speed,
-        owner: "boss"
-      });
-      baseDelay = 250;
+      const numRays = game.difficultyIdx === 3 ? 4 : 1;
+      for(let i=0; i<numRays; i++){
+        const angle = Math.random() * Math.PI * 2;
+        game.bullets.push({
+          x: centerX, y: centerY,
+          vx: Math.cos(angle) * 0.14 * speed,
+          vy: Math.sin(angle) * 0.14 * speed,
+          owner: "boss"
+        });
+      }
+      baseDelay = 220 * diff.delayMult;
     }
     b.patternTimer++;
     if(b.patternTimer > 5){ b.patternTimer = 0; b.attackPattern++; }
@@ -578,7 +612,8 @@ function bossShoot(){
 
   else if(b.type === "asriel"){
     if(b.attackPattern % 2 === 0){
-      for(let i = 0; i < 3; i++){
+      const drops = game.difficultyIdx === 3 ? 6 : 3;
+      for(let i = 0; i < drops; i++){
         const dropX = Math.random() * (W - 20) + 10;
         game.bullets.push({
           x: dropX, y: 10,
@@ -587,9 +622,9 @@ function bossShoot(){
           owner: "asriel_star"
         });
       }
-      baseDelay = 380;
+      baseDelay = 320 * diff.delayMult;
     } else {
-      const numRays = 10;
+      const numRays = game.difficultyIdx === 3 ? 16 : 10;
       for(let i=0; i<numRays; i++){
         const angle = (i / numRays) * Math.PI + Math.PI * 0.1;
         game.bullets.push({
@@ -599,7 +634,7 @@ function bossShoot(){
           owner: "boss"
         });
       }
-      baseDelay = 500;
+      baseDelay = 420 * diff.delayMult;
     }
 
     if(b.phase2Spawned && game.swords.length > 0){
@@ -626,7 +661,7 @@ function hit(a,b){
          a.y < b.y+b.h && a.y+a.h > b.y;
 }
 
-// Get accurate, smaller hitbox for player precision
+// Precise hitbox
 function getPlayerHitbox(){
   return {
     x: game.playerX + 4,
@@ -695,7 +730,7 @@ function updateMinions(dt){
     if(m.x < 10 || m.x > W - 20) m.dir *= -1;
 
     m.shootTimer += dt;
-    if(m.shootTimer >= 1100){
+    if(m.shootTimer >= 1100 * DIFFICULTIES[game.difficultyIdx].delayMult){
       m.shootTimer = 0;
       game.bullets.push({
         x: m.x + 6, y: m.y + 10,
@@ -793,8 +828,9 @@ function update(dt){
 
       if(bullet.owner === "asriel_star" && bullet.y > H * 0.45 && !bullet.split){
         bullet.split = true;
-        for(let a=0; a<4; a++){
-          const ang = a * (Math.PI / 2);
+        const count = game.difficultyIdx === 3 ? 6 : 4;
+        for(let a=0; a<count; a++){
+          const ang = a * (Math.PI * 2 / count);
           game.bullets.push({
             x: bullet.x, y: bullet.y,
             vx: Math.cos(ang) * 0.08 * getSpeedMultiplier(),
@@ -923,8 +959,8 @@ function clearScreen(){
   }
 }
 
-function text(t,x,y,size=12,align="left"){
-  ctx.fillStyle="#fff";
+function text(t,x,y,size=12,align="left",color="#fff"){
+  ctx.fillStyle=color;
   ctx.font=`${size}px monospace`;
   ctx.textAlign=align;
   ctx.fillText(t,x,y);
@@ -1065,10 +1101,21 @@ function draw(){
   clearScreen();
 
   if(game.screen==="menu"){
-    text("FARASHOOTERS",160,62,22,"center");
-    text("UNDERTALE BOSS EDITION",160,80,10,"center");
-    text("PRESS SHOOT TO START",160,125,13,"center");
-    text("D2 LEFT • D3 RIGHT • D4 SHOOT",160,150,9,"center");
+    text("FARASHOOTERS",160,45,22,"center");
+    text("UNDERTALE BOSS EDITION",160,62,10,"center");
+
+    text("SELECT DIFFICULTY:",160,95,11,"center","#9ee7ff");
+
+    DIFFICULTIES.forEach((d, i) => {
+      const selected = i === game.difficultyIdx;
+      const prefix = selected ? "► " : "  ";
+      const suffix = selected ? " ◄" : "  ";
+      const color = selected ? (i === 3 ? "#ff3355" : "#ffff55") : "#888888";
+      text(prefix + d.name + suffix, 160, 120 + i * 20, 13, "center", color);
+    });
+
+    text("◀ / ▶ : CHANGE DIFFICULTY",160,210,9,"center");
+    text("PRESS SHOOT TO START",160,225,11,"center","#ffffff");
   }else{
     drawHUD();
     for(const e of game.enemies) drawEnemy(e.x,e.y);
@@ -1096,7 +1143,16 @@ function loop(now){
 
 function setupTouch(btnId, key){
   const btn = document.getElementById(btnId);
-  btn.addEventListener("pointerdown", e => { e.preventDefault(); initAudio(); inputs[key] = true; });
+  btn.addEventListener("pointerdown", e => { 
+    e.preventDefault(); 
+    initAudio(); 
+    if(game.screen === "menu"){
+      if(key === "left") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+      if(key === "right") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+    } else {
+      inputs[key] = true; 
+    }
+  });
   btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
   btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
   btn.addEventListener("pointerleave", e => { e.preventDefault(); inputs[key] = false; });
@@ -1134,8 +1190,22 @@ fullscreenBtn.addEventListener("click", async () => {
 
 document.addEventListener("keydown", e => {
   initAudio();
-  if(e.key === "ArrowLeft"){ e.preventDefault(); inputs.left = true; }
-  if(e.key === "ArrowRight"){ e.preventDefault(); inputs.right = true; }
+  if(e.key === "ArrowLeft"){ 
+    e.preventDefault(); 
+    if(game.screen === "menu"){
+      game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+    } else {
+      inputs.left = true; 
+    }
+  }
+  if(e.key === "ArrowRight"){ 
+    e.preventDefault(); 
+    if(game.screen === "menu"){
+      game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+    } else {
+      inputs.right = true; 
+    }
+  }
   if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
 });
 
