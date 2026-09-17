@@ -962,7 +962,7 @@ function update(dt){
     for(const e of game.enemies){
       if(!e.alive) continue;
       if(hit(br,e)){
-        bullet.y = -30;
+        b.y = -30;
         e.hp--;
         sfx.hit();
         if(e.hp <= 0){
