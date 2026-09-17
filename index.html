@@ -71,15 +71,11 @@ const noteFreqs = {
   'REST': 0
 };
 
-const asgoreMelody = [
+const bossMelody = [
   { m: 'C5', b: 'C3' }, { m: 'G4', b: 'C3' }, { m: 'Eb4', b: 'G3' }, { m: 'G4', b: 'C3' },
   { m: 'C5', b: 'C3' }, { m: 'D5', b: 'C3' }, { m: 'Eb5', b: 'G3' }, { m: 'F5', b: 'C3' },
   { m: 'G5', b: 'Ab3' }, { m: 'Eb5', b: 'Ab3' }, { m: 'C5', b: 'Eb4' }, { m: 'Eb5', b: 'Ab3' },
-  { m: 'G5', b: 'Ab3' }, { m: 'Ab5', b: 'Ab3' }, { m: 'G5', b: 'Eb4' }, { m: 'F5', b: 'Ab3' },
-  { m: 'Eb5', b: 'Bb3' }, { m: 'Bb4', b: 'Bb3' }, { m: 'G4', b: 'D4' }, { m: 'Bb4', b: 'Bb3' },
-  { m: 'Eb5', b: 'Bb3' }, { m: 'F5', b: 'Bb3' }, { m: 'G5', b: 'D4' }, { m: 'Eb5', b: 'Bb3' },
-  { m: 'F5', b: 'F3' }, { m: 'C5', b: 'F3' }, { m: 'Ab4', b: 'C4' }, { m: 'C5', b: 'F3' },
-  { m: 'F5', b: 'G3' }, { m: 'G5', b: 'G3' }, { m: 'Ab5', b: 'D4' }, { m: 'G5', b: 'G3' }
+  { m: 'G5', b: 'Ab3' }, { m: 'Ab5', b: 'Ab3' }, { m: 'G5', b: 'Eb4' }, { m: 'F5', b: 'Ab3' }
 ];
 
 function initAudio(){
@@ -109,7 +105,6 @@ function playSynthNote(freq, type, duration, volume){
   osc.stop(audioCtx.currentTime + duration);
 }
 
-// Sound FX Generators
 const sfx = {
   shoot(){
     if(!audioCtx) return;
@@ -165,16 +160,15 @@ function playBossMusic(){
   initAudio();
   stopBossMusic();
   noteIndex = 0;
-  
   musicInterval = setInterval(() => {
-    const current = asgoreMelody[noteIndex];
+    const current = bossMelody[noteIndex];
     if(current.m && noteFreqs[current.m]){
       playSynthNote(noteFreqs[current.m], 'square', 0.18, 0.07);
     }
     if(current.b && noteFreqs[current.b]){
       playSynthNote(noteFreqs[current.b], 'sawtooth', 0.22, 0.1);
     }
-    noteIndex = (noteIndex + 1) % asgoreMelody.length;
+    noteIndex = (noteIndex + 1) % bossMelody.length;
   }, 160);
 }
 
@@ -185,7 +179,6 @@ function stopBossMusic(){
   }
 }
 
-// Input state tracking
 const inputs = { left: false, right: false };
 
 const game = {
@@ -199,6 +192,7 @@ const game = {
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
+  minions: [],
   enemyDir: 1,
   stageClearTimer: 0,
   invulnerableUntil: 0,
@@ -289,6 +283,7 @@ function resetGame(){
   game.playerX=W/2-8;
   game.lastPlayerShootTime=0;
   game.bullets=[];
+  game.minions=[];
   game.invulnerableUntil=0;
   game.message="STAGE 1";
   game.messageUntil=performance.now()+1200;
@@ -303,7 +298,8 @@ function getSpeedMultiplier(){
 }
 
 function spawnCurrentStage(){
-  if(game.stage % 5 === 0){
+  game.minions = [];
+  if(game.stage === 5 || game.stage === 10 || game.stage === 15){
     spawnBoss();
   }else{
     stopBossMusic();
@@ -355,10 +351,22 @@ function spawnBoss(){
   game.bossMoveTimer=0;
   game.bossShootTimer=0;
 
-  const speed = getSpeedMultiplier();
-  const hp = 30 + (game.stage * 4);
+  let hp = 40;
+  let type = "undyne";
+  let title = "UNDYNE THE UNDYING";
+
+  if(game.stage === 10){
+    hp = 80;
+    type = "asgore";
+    title = "ASGORE";
+  } else if(game.stage >= 15){
+    hp = 120;
+    type = "sans";
+    title = "SANS";
+  }
 
   game.boss={
+    type: type,
     x:W/2-32,
     y:35,
     w:64,
@@ -366,14 +374,19 @@ function spawnBoss(){
     hp:hp,
     maxHp:hp,
     dir:1,
-    speed:0.075 * speed,
+    speed:0.075 * getSpeedMultiplier(),
     spiralAngle: 0,
     attackPattern: 0,
-    patternTimer: 0
+    patternTimer: 0,
+    isImmortal: false,
+    immortalTimer: 0,
+    isDying: false,
+    spiralCycleCount: 0,
+    phase2Spawned: false
   };
 
-  game.nextBossShootInterval = 400 + Math.random() * 300;
-  game.message="STAGE " + game.stage + " • BOSS (+1 LIFE)";
+  game.nextBossShootInterval = 400;
+  game.message="STAGE " + game.stage + " • " + title;
   game.messageUntil=performance.now()+1800;
 
   playBossMusic();
@@ -388,7 +401,7 @@ function shoot(){
   if(game.screen!=="playing") return;
 
   const now = performance.now();
-  if(now - game.lastPlayerShootTime < 250) return;
+  if(now - game.lastPlayerShootTime < 100) return;
 
   if(game.bullets.filter(b=>b.owner==="player").length < 10){
     game.bullets.push({
@@ -403,113 +416,122 @@ function shoot(){
   }
 }
 
-function updateEnemies(dt){
-  const speed = getSpeedMultiplier();
-
-  const alive = game.enemies.filter(e => e.alive);
-  if(alive.length){
-    let minX = Math.min(...alive.map(e => e.x));
-    let maxX = Math.max(...alive.map(e => e.x));
-    const step = 0.035 * speed * dt * game.enemyDir;
-
-    if(maxX >= W - 24 && game.enemyDir > 0){
-      game.enemyDir = -1;
-      alive.forEach(e => e.y += 6);
-    } else if(minX <= 4 && game.enemyDir < 0){
-      game.enemyDir = 1;
-      alive.forEach(e => e.y += 6);
-    } else {
-      alive.forEach(e => e.x += step);
-    }
-  }
-
-  for(const e of game.enemies){
-    if(!e.alive) continue;
-
-    e.shootTimer += dt;
-    if(e.shootTimer >= e.nextShootInterval){
-      e.shootTimer = 0;
-      e.nextShootInterval = getRandomEnemyInterval();
-
-      game.bullets.push({
-        x: e.x + 10,
-        y: e.y + 14,
-        vx: 0,
-        vy: 0.14 * speed,
-        owner: "enemy"
-      });
-    }
-  }
-}
-
 function bossShoot(){
   if(!game.boss) return;
-
-  const b=game.boss;
-  const speed=getSpeedMultiplier();
+  const b = game.boss;
+  const speed = getSpeedMultiplier();
   const centerX = b.x + b.w / 2;
   const centerY = b.y + b.h / 2;
   let baseDelay = 400;
 
-  switch(b.attackPattern % 3){
-    case 0:
-      const spiralBullets = 6;
-      for(let i = 0; i < spiralBullets; i++){
-        const angle = b.spiralAngle + (i * (Math.PI * 2 / spiralBullets));
+  // Undyne Attacks (Stage 5)
+  if(b.type === "undyne"){
+    const spd = b.isImmortal ? 1.25 : 1.0;
+    const mult = b.isImmortal ? 1.5 : 1.0;
+
+    if(b.attackPattern % 2 === 0){ // Spear Ring
+      const numBullets = Math.floor(8 * mult);
+      for(let i=0; i<numBullets; i++){
+        const angle = i * (Math.PI * 2 / numBullets);
         game.bullets.push({
-          x: centerX,
-          y: centerY,
-          vx: Math.cos(angle) * (0.0825 * speed),
-          vy: Math.sin(angle) * (0.0825 * speed),
+          x: centerX, y: centerY,
+          vx: Math.cos(angle) * 0.09 * speed * spd,
+          vy: Math.sin(angle) * 0.09 * speed * spd,
           owner: "boss"
         });
       }
-      b.spiralAngle += 0.28;
-      baseDelay = 220 / speed;
-      break;
-
-    case 1:
-      const px = game.playerX + 8;
-      const py = game.playerY + 6;
-      const angleToPlayer = Math.atan2(py - centerY, px - centerX);
-      const spread = [-0.15, 0.15];
-
-      for(let offset of spread){
-        const angle = angleToPlayer + offset;
+      baseDelay = 500 / spd;
+    } else { // Direct Arrow Volley
+      const count = Math.floor(5 * mult);
+      for(let i=0; i<count; i++){
         game.bullets.push({
-          x: centerX,
-          y: centerY,
-          vx: Math.cos(angle) * (0.1125 * speed),
-          vy: Math.sin(angle) * (0.1125 * speed),
+          x: b.x + (b.w / count) * i + 6,
+          y: b.y + b.h,
+          vx: (Math.random() - 0.5) * 0.05,
+          vy: (0.12 + Math.random() * 0.04) * speed * spd,
           owner: "boss"
         });
       }
-      baseDelay = 650 / speed;
-      break;
-
-    case 2:
-      const ringBullets = 12;
-      for(let i = 0; i < ringBullets; i++){
-        const angle = i * (Math.PI * 2 / ringBullets);
-        game.bullets.push({
-          x: centerX,
-          y: centerY,
-          vx: Math.cos(angle) * (0.0675 * speed),
-          vy: Math.sin(angle) * (0.0675 * speed),
-          owner: "boss"
-        });
-      }
-      baseDelay = 950 / speed;
-      break;
+      baseDelay = 400 / spd;
+    }
+    b.patternTimer++;
+    if(b.patternTimer > 6){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  b.patternTimer++;
-  if(b.patternTimer > 8){
-    b.patternTimer = 0;
-    b.attackPattern++;
+  // Asgore Attacks (Stage 10)
+  else if(b.type === "asgore"){
+    if(b.hp < b.maxHp * 0.5 && b.spiralCycleCount < 5){ // Mid-center Giant Spiral below 50% HP
+      const numRays = 12;
+      for(let i=0; i<numRays; i++){
+        const angle = b.spiralAngle + (i * (Math.PI * 2 / numRays));
+        game.bullets.push({
+          x: W / 2, y: H / 3,
+          vx: Math.cos(angle) * 0.08 * speed,
+          vy: Math.sin(angle) * 0.08 * speed,
+          owner: "boss"
+        });
+      }
+      b.spiralAngle += 0.25;
+      b.patternTimer++;
+      if(b.patternTimer > 8){
+        b.patternTimer = 0;
+        b.spiralCycleCount++;
+      }
+      baseDelay = 200;
+    } else { // Standard Swirling Attacks
+      const px = game.playerX + 8, py = game.playerY + 6;
+      const angle = Math.atan2(py - centerY, px - centerX);
+      for(let offset of [-0.2, 0, 0.2]){
+        game.bullets.push({
+          x: centerX, y: centerY,
+          vx: Math.cos(angle + offset) * 0.1 * speed,
+          vy: Math.sin(angle + offset) * 0.1 * speed,
+          owner: "boss"
+        });
+      }
+      baseDelay = 550;
+      b.attackPattern++;
+    }
   }
 
-  game.nextBossShootInterval = baseDelay + (Math.random() * 200);
+  // Sans Attacks (Stage 15 Final Boss)
+  else if(b.type === "sans"){
+    if(b.attackPattern % 3 === 0){ // Gaster Blaster Beam Sweep
+      for(let i = -2; i <= 2; i++){
+        game.bullets.push({
+          x: centerX + i * 15, y: b.y + b.h,
+          vx: i * 0.03, vy: 0.18 * speed,
+          owner: "boss"
+        });
+      }
+      baseDelay = 350;
+    } else if(b.attackPattern % 3 === 1){ // Bone Wall (Gap pattern)
+      const gapIndex = Math.floor(Math.random() * 8);
+      for(let i=0; i<10; i++){
+        if(i !== gapIndex && i !== gapIndex + 1){
+          game.bullets.push({
+            x: i * 32 + 16, y: b.y + b.h,
+            vx: 0, vy: 0.11 * speed,
+            owner: "boss"
+          });
+        }
+      }
+      baseDelay = 700;
+    } else { // Slam/Targeted Chaos
+      const angle = Math.random() * Math.PI * 2;
+      game.bullets.push({
+        x: centerX, y: centerY,
+        vx: Math.cos(angle) * 0.14 * speed,
+        vy: Math.sin(angle) * 0.14 * speed,
+        owner: "boss"
+      });
+      baseDelay = 250;
+    }
+    b.patternTimer++;
+    if(b.patternTimer > 5){ b.patternTimer = 0; b.attackPattern++; }
+  }
+
+  game.nextBossShootInterval = baseDelay;
 }
 
 function hit(a,b){
@@ -535,10 +557,76 @@ function loseLife(){
   }
 }
 
+function updateEnemies(dt){
+  const speed = getSpeedMultiplier();
+
+  const alive = game.enemies.filter(e => e.alive);
+  if(alive.length){
+    let minX = Math.min(...alive.map(e => e.x));
+    let maxX = Math.max(...alive.map(e => e.x));
+    const step = 0.035 * speed * dt * game.enemyDir;
+
+    if(maxX >= W - 24 && game.enemyDir > 0){
+      game.enemyDir = -1;
+      alive.forEach(e => e.y += 6);
+    } else if(minX <= 4 && game.enemyDir < 0){
+      game.enemyDir = 1;
+      alive.forEach(e => e.y += 6);
+    } else {
+      alive.forEach(e => e.x += step);
+    }
+  }
+
+  for(const e of game.enemies){
+    if(!e.alive) continue;
+    e.shootTimer += dt;
+    if(e.shootTimer >= e.nextShootInterval){
+      e.shootTimer = 0;
+      e.nextShootInterval = getRandomEnemyInterval();
+      game.bullets.push({
+        x: e.x + 10, y: e.y + 14,
+        vx: 0, vy: 0.14 * speed,
+        owner: "enemy"
+      });
+    }
+  }
+}
+
+function updateMinions(dt){
+  for(const m of game.minions){
+    m.x += m.dir * 0.05 * dt;
+    if(m.x < 10 || m.x > W - 20) m.dir *= -1;
+
+    m.shootTimer += dt;
+    if(m.shootTimer >= 1200){
+      m.shootTimer = 0;
+      game.bullets.push({
+        x: m.x + 6, y: m.y + 10,
+        vx: 0, vy: 0.12 * getSpeedMultiplier(),
+        owner: "enemy"
+      });
+    }
+  }
+}
+
+function killBoss(){
+  game.boss=null;
+  game.bullets=[];
+  game.minions=[];
+  stopBossMusic();
+  sfx.clear();
+  game.stageClearTimer=performance.now()+1200;
+
+  if(game.stage >= 15){
+    game.screen = "won";
+  } else {
+    game.message="BOSS DEFEATED!";
+    game.messageUntil=performance.now()+1100;
+  }
+}
+
 function update(dt){
   if(game.screen!=="playing") return;
-
-  const difficulty=getSpeedMultiplier();
 
   if(inputs.left) game.playerX -= game.playerSpeed * dt;
   if(inputs.right) game.playerX += game.playerSpeed * dt;
@@ -547,13 +635,28 @@ function update(dt){
   if(game.boss){
     const b=game.boss;
 
-    b.x += b.dir * b.speed * dt;
-    if(b.x <= 4){
-      b.x=4;
-      b.dir=1;
-    }else if(b.x+b.w >= W-4){
-      b.x=W-4-b.w;
-      b.dir=-1;
+    // Handle Undyne Immortality Phase (15 Seconds)
+    if(b.isImmortal){
+      b.immortalTimer -= dt;
+      if(b.immortalTimer <= 0){
+        killBoss();
+        return;
+      }
+    } else {
+      b.x += b.dir * b.speed * dt;
+      if(b.x <= 4){ b.x=4; b.dir=1; }
+      else if(b.x+b.w >= W-4){ b.x=W-4-b.w; b.dir=-1; }
+    }
+
+    // Sans Phase 2 (Spawns 2 Minion Aliens below 50% HP)
+    if(b.type === "sans" && b.hp < b.maxHp * 0.5 && !b.phase2Spawned){
+      b.phase2Spawned = true;
+      game.minions.push(
+        { x: W/4, y: 80, w: 12, h: 10, dir: 1, shootTimer: 0 },
+        { x: (W*3)/4, y: 80, w: 12, h: 10, dir: -1, shootTimer: 0 }
+      );
+      game.message = "SANS SPAWNED ASSISTANTS!";
+      game.messageUntil = performance.now() + 1500;
     }
 
     game.bossShootTimer += dt;
@@ -562,11 +665,7 @@ function update(dt){
       bossShoot();
     }
 
-    game.bossMoveTimer += dt;
-    if(game.bossMoveTimer>=1800/difficulty){
-      game.bossMoveTimer=0;
-      if(b.y < 78) b.y += 4;
-    }
+    updateMinions(dt);
 
     for(const bullet of game.bullets){
       bullet.x += (bullet.vx || 0) * dt;
@@ -575,7 +674,7 @@ function update(dt){
     game.bullets=game.bullets.filter(bullet=>bullet.x > -20 && bullet.x < W+20 && bullet.y > -20 && bullet.y < H+20);
 
     for(const bullet of game.bullets){
-      if(bullet.owner!=="boss") continue;
+      if(bullet.owner!=="boss" && bullet.owner!=="enemy") continue;
       const br={x:bullet.x-2,y:bullet.y-2,w:4,h:4};
       const pr={x:game.playerX,y:game.playerY,w:16,h:12};
       if(hit(br,pr)){
@@ -589,18 +688,22 @@ function update(dt){
       const br={x:bullet.x-1,y:bullet.y-5,w:2,h:7};
       if(hit(br,b)){
         bullet.y=-30;
-        b.hp--;
-        game.score+=25;
-        sfx.hit();
+        if(!b.isImmortal){
+          b.hp--;
+          game.score+=25;
+          sfx.hit();
 
-        if(b.hp<=0){
-          game.boss=null;
-          game.bullets=[];
-          stopBossMusic();
-          sfx.clear();
-          game.stageClearTimer=performance.now()+1200;
-          game.message="BOSS DEFEATED!";
-          game.messageUntil=performance.now()+1100;
+          if(b.hp<=0){
+            if(b.type === "undyne" && !b.isImmortal){
+              b.hp = 0;
+              b.isImmortal = true;
+              b.immortalTimer = 15000;
+              game.message = "UNDYNE REFUSES TO DIE! (15s)";
+              game.messageUntil = performance.now() + 2000;
+            } else {
+              killBoss();
+            }
+          }
         }
       }
     }
@@ -630,28 +733,16 @@ function update(dt){
 
   for(const e of game.enemies){
     if(!e.alive) continue;
-
-    if(e.y+e.h >= game.playerY){
-      e.alive=false;
-      loseLife();
-      continue;
-    }
-
+    if(e.y+e.h >= game.playerY){ e.alive=false; loseLife(); continue; }
     const playerRect={x:game.playerX,y:game.playerY,w:16,h:12};
-    if(hit(playerRect,e)){
-      e.alive=false;
-      loseLife();
-    }
+    if(hit(playerRect,e)){ e.alive=false; loseLife(); }
   }
 
   for(const b of game.bullets){
     if(b.owner!=="enemy") continue;
     const br={x:b.x-1,y:b.y-5,w:2,h:7};
     const pr={x:game.playerX,y:game.playerY,w:16,h:12};
-    if(hit(br,pr)){
-      b.y=H+20;
-      loseLife();
-    }
+    if(hit(br,pr)){ b.y=H+20; loseLife(); }
   }
 
   for(const b of game.bullets){
@@ -660,11 +751,7 @@ function update(dt){
     for(const e of game.enemies){
       if(!e.alive) continue;
       if(hit(br,e)){
-        e.alive=false;
-        b.y=-30;
-        game.score+=10;
-        sfx.hit();
-        break;
+        e.alive=false; b.y=-30; game.score+=10; sfx.hit(); break;
       }
     }
   }
@@ -734,6 +821,13 @@ function drawEnemy(x,y){
   ctx.fillRect(x+12,y+5,3,3);
 }
 
+function drawMinions(){
+  for(const m of game.minions){
+    ctx.fillStyle="#00ffcc";
+    ctx.fillRect(m.x, m.y, m.w, m.h);
+  }
+}
+
 function drawBullet(b){
   if(b.owner==="boss"){
     ctx.fillStyle="#ff8800";
@@ -747,23 +841,31 @@ function drawBullet(b){
 }
 
 function drawBoss(b){
-  ctx.fillStyle="#b56cff";
+  if(b.type === "undyne"){
+    ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
+  } else if(b.type === "asgore"){
+    ctx.fillStyle = "#ffaa00";
+  } else {
+    ctx.fillStyle = "#ffffff";
+  }
+
   ctx.fillRect(b.x+8,b.y+5,b.w-16,b.h-10);
   ctx.fillRect(b.x+16,b.y,b.w-32,5);
   ctx.fillRect(b.x,b.y+12,10,12);
   ctx.fillRect(b.x+b.w-10,b.y+12,10,12);
 
-  ctx.fillStyle="#fff";
+  ctx.fillStyle="#000";
   ctx.fillRect(b.x+17,b.y+11,8,7);
   ctx.fillRect(b.x+b.w-25,b.y+11,8,7);
-  ctx.fillStyle="#ff405f";
-  ctx.fillRect(b.x+20,b.y+13,4,3);
-  ctx.fillRect(b.x+b.w-24,b.y+13,4,3);
 
-  ctx.fillStyle="#42152b";
-  ctx.fillRect(b.x,b.y-9,b.w,4);
-  ctx.fillStyle="#ff647c";
-  ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
+  if(!b.isImmortal){
+    ctx.fillStyle="#42152b";
+    ctx.fillRect(b.x,b.y-9,b.w,4);
+    ctx.fillStyle="#ff647c";
+    ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
+  } else {
+    text("IMMORTAL: " + Math.ceil(b.immortalTimer / 1000) + "s", b.x + b.w/2, b.y - 8, 10, "center");
+  }
 }
 
 function drawHUD(){
@@ -789,18 +891,19 @@ function draw(){
 
   if(game.screen==="menu"){
     text("FARASHOOTERS",160,62,22,"center");
-    text("ARDUINO EDITION",160,80,10,"center");
+    text("UNDERTALE BOSS EDITION",160,80,10,"center");
     text("PRESS SHOOT TO START",160,125,13,"center");
     text("D2 LEFT • D3 RIGHT • D4 SHOOT",160,150,9,"center");
   }else{
     drawHUD();
     for(const e of game.enemies) drawEnemy(e.x,e.y);
+    drawMinions();
     if(game.boss) drawBoss(game.boss);
     for(const b of game.bullets) drawBullet(b);
     drawPlayer();
 
     if(game.messageUntil>performance.now()){
-      text(game.message,160,110,18,"center");
+      text(game.message,160,110,16,"center");
     }
     if(game.screen==="gameover") overlay("GAME OVER","Press SHOOT to restart");
     if(game.screen==="won") overlay("YOU WIN!","Press SHOOT to return to menu");
