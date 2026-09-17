@@ -484,20 +484,23 @@ function bossShoot(){
   let baseDelay = 400;
 
   if(b.type === "undyne"){
-    const speedMult = b.isImmortal ? 1.5 : 1.0;
+    const speedMult = b.isImmortal ? 1.4 : 1.0;
+    
+    // Updated Undyne Attack: Fires 3 spears spreading downwards
+    const offsets = [-0.05, 0, 0.05];
+    for(const vx of offsets){
+      game.bullets.push({
+        x: centerX,
+        y: b.y + b.h,
+        vx: vx * speed * speedMult,
+        vy: 0.24 * speed * speedMult,
+        owner: "undyne_spear",
+        w: 8,
+        h: 20
+      });
+    }
 
-    // Undyne Spear Attack down the middle
-    game.bullets.push({
-      x: W / 2,
-      y: b.y + b.h,
-      vx: 0,
-      vy: 0.22 * speed * speedMult,
-      owner: "undyne_spear",
-      w: 8,
-      h: 24
-    });
-
-    baseDelay = b.isImmortal ? 280 : 420;
+    baseDelay = b.isImmortal ? 260 : 380;
     b.patternTimer++;
     if(b.patternTimer > 6){ b.patternTimer = 0; b.attackPattern++; }
   }
@@ -621,6 +624,16 @@ function bossShoot(){
 function hit(a,b){
   return a.x < b.x+b.w && a.x+a.w > b.x &&
          a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+// Get accurate, smaller hitbox for player precision
+function getPlayerHitbox(){
+  return {
+    x: game.playerX + 4,
+    y: game.playerY + 2,
+    w: 8,
+    h: 8
+  };
 }
 
 function loseLife(){
@@ -798,12 +811,12 @@ function update(dt){
       
       let br;
       if(bullet.owner === "undyne_spear"){
-        br = { x: bullet.x - 4, y: bullet.y, w: 8, h: 24 };
+        br = { x: bullet.x - 4, y: bullet.y, w: 8, h: 20 };
       } else {
         br = { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
       }
 
-      const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+      const pr = getPlayerHitbox();
       if(hit(br,pr)){
         bullet.y=H+30;
         loseLife();
@@ -824,7 +837,7 @@ function update(dt){
             if(b.type === "undyne" && !b.isImmortal){
               b.hp = 0;
               b.isImmortal = true;
-              b.immortalTimer = 10000; // Reduced to 10 seconds
+              b.immortalTimer = 10000;
               game.message = "UNDYNE REFUSES TO DIE! (10s)";
               game.messageUntil = performance.now() + 2000;
             } else {
@@ -836,7 +849,7 @@ function update(dt){
     }
 
     if(game.boss){
-      const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+      const pr = getPlayerHitbox();
       if(hit(pr,b)) loseLife();
     }
 
@@ -861,14 +874,14 @@ function update(dt){
   for(const e of game.enemies){
     if(!e.alive) continue;
     if(e.y+e.h >= game.playerY){ e.alive=false; loseLife(); continue; }
-    const playerRect={x:game.playerX,y:game.playerY,w:16,h:12};
+    const playerRect = getPlayerHitbox();
     if(hit(playerRect,e)){ e.alive=false; loseLife(); }
   }
 
   for(const b of game.bullets){
     if(b.owner!=="enemy") continue;
     const br={x:b.x-1,y:b.y-5,w:2,h:7};
-    const pr={x:game.playerX,y:game.playerY,w:16,h:12};
+    const pr = getPlayerHitbox();
     if(hit(br,pr)){ b.y=H+20; loseLife(); }
   }
 
@@ -973,16 +986,15 @@ function drawSwords(){
 
 function drawBullet(b){
   if(b.owner==="undyne_spear"){
-    // Draw Undyne Middle Spear
     ctx.fillStyle = "#00ffff";
     ctx.beginPath();
-    ctx.moveTo(b.x, b.y + 24);
-    ctx.lineTo(b.x - 4, b.y + 8);
-    ctx.lineTo(b.x - 2, b.y + 8);
+    ctx.moveTo(b.x, b.y + 20);
+    ctx.lineTo(b.x - 4, b.y + 6);
+    ctx.lineTo(b.x - 2, b.y + 6);
     ctx.lineTo(b.x - 2, b.y);
     ctx.lineTo(b.x + 2, b.y);
-    ctx.lineTo(b.x + 2, b.y + 8);
-    ctx.lineTo(b.x + 4, b.y + 8);
+    ctx.lineTo(b.x + 2, b.y + 6);
+    ctx.lineTo(b.x + 4, b.y + 6);
     ctx.closePath();
     ctx.fill();
   }else if(b.owner==="boss"){
