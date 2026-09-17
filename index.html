@@ -147,17 +147,6 @@ const sfx = {
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.start(); osc.stop(audioCtx.currentTime + 0.35);
   },
-  slam(){
-    if(!audioCtx) return;
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.2);
-    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.2);
-  },
   clear(){
     if(!audioCtx) return;
     playSynthNote(noteFreqs['C5'], 'square', 0.1, 0.08);
@@ -198,8 +187,6 @@ const game = {
   cannons: 1,
   playerX: W / 2 - 5,
   playerY: H - 24,
-  playerVy: 0,
-  gravityDir: "DOWN",
   playerSpeed: 0.16,
   lastPlayerShootTime: 0,
   bullets: [],
@@ -282,7 +269,6 @@ function returnToMenu(){
   game.lasers = [];
   game.sabres = [];
   game.boss = null;
-  game.gravityDir = "DOWN";
   inputs.left = false;
   inputs.right = false;
 }
@@ -296,8 +282,6 @@ function resetGame(){
   game.cannons=1;
   game.playerX=W/2-5;
   game.playerY=H-24;
-  game.playerVy=0;
-  game.gravityDir="DOWN";
   game.lastPlayerShootTime=0;
   game.bullets=[];
   game.lasers=[];
@@ -316,7 +300,6 @@ function getSpeedMultiplier(){
 function spawnCurrentStage(){
   game.lasers = [];
   game.sabres = [];
-  game.gravityDir = "DOWN";
   if(game.stage === 4 || game.stage === 8 || game.stage === 12 || game.stage === 16 || game.stage >= 20){
     spawnBoss();
   }else{
@@ -461,6 +444,24 @@ function summonBossMinions(count, minionType){
   }
 }
 
+function spawnPelletCorridor(speed){
+  const totalPellets = 32;
+  const pelletSpacing = W / totalPellets;
+  const gapWidth = 4; // Gap width in pellets (safe corridor)
+  const gapStartIndex = Math.floor(Math.random() * (totalPellets - gapWidth));
+
+  for(let i = 0; i < totalPellets; i++){
+    if(i >= gapStartIndex && i < gapStartIndex + gapWidth) continue; // Leave the gap open
+    game.bullets.push({
+      x: i * pelletSpacing + pelletSpacing / 2,
+      y: game.boss ? game.boss.y + game.boss.h : 20,
+      vx: 0,
+      vy: 0.13 * speed,
+      owner: "sans_pellet"
+    });
+  }
+}
+
 function bossShoot(){
   if(!game.boss) return;
   const b = game.boss;
@@ -542,15 +543,11 @@ function bossShoot(){
   // --- SANS ---
   else if(b.type === "sans"){
     const mode = b.attackPattern % 4;
-    if(mode === 0){ // Soul Gravity Slam
-      const dirs = ["UP", "DOWN", "LEFT", "RIGHT"];
-      game.gravityDir = dirs[Math.floor(Math.random() * dirs.length)];
-      if(game.gravityDir === "UP") game.playerVy = -0.3;
-      else if(game.gravityDir === "DOWN") game.playerVy = 0.3;
-      game.message = "BLUE SOUL - GRAVITY " + game.gravityDir + "!";
-      game.messageUntil = performance.now() + 1200;
-      sfx.slam();
-      baseDelay = 2400 * diff.delayMult;
+    if(mode === 0){ // White Pellet Corridor (Continuous Bone Row)
+      spawnPelletCorridor(speed);
+      game.message = "PELLET CORRIDOR - FIND THE GAP!";
+      game.messageUntil = performance.now() + 1000;
+      baseDelay = 1600 * diff.delayMult;
     } else if(mode === 1){ // Gaster Blaster Lasers
       game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 1400, warning: true });
       baseDelay = 2600 * diff.delayMult;
@@ -734,7 +731,6 @@ function killBoss(){
   game.enemies=[];
   game.lasers=[];
   game.sabres=[];
-  game.gravityDir="DOWN";
   stopBossMusic();
   sfx.clear();
   game.stageClearTimer=performance.now()+1500;
@@ -751,19 +747,8 @@ function killBoss(){
 function update(dt){
   if(game.screen!=="playing") return;
 
-  // Blue Soul Gravity Physics Movement
-  if(game.gravityDir === "UP"){
-    game.playerY -= game.playerSpeed * dt;
-    if(inputs.left) game.playerX -= game.playerSpeed * dt;
-    if(inputs.right) game.playerX += game.playerSpeed * dt;
-  } else if(game.gravityDir === "LEFT"){
-    game.playerX -= game.playerSpeed * dt;
-  } else if(game.gravityDir === "RIGHT"){
-    game.playerX += game.playerSpeed * dt;
-  } else { // Standard "DOWN"
-    if(inputs.left) game.playerX -= game.playerSpeed * dt;
-    if(inputs.right) game.playerX += game.playerSpeed * dt;
-  }
+  if(inputs.left) game.playerX -= game.playerSpeed * dt;
+  if(inputs.right) game.playerX += game.playerSpeed * dt;
 
   game.playerX = Math.max(0, Math.min(W - 10, game.playerX));
   game.playerY = Math.max(15, Math.min(H - 24, game.playerY));
@@ -819,6 +804,8 @@ function update(dt){
     if(bullet.owner==="player") continue;
     let br = bullet.owner === "undyne_spear" 
       ? { x: bullet.x - 4, y: bullet.y, w: 8, h: 20 }
+      : bullet.owner === "sans_pellet"
+      ? { x: bullet.x - 3, y: bullet.y - 3, w: 6, h: 6 }
       : { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
 
     if(hit(br, pr)){ loseLife(); }
@@ -905,7 +892,7 @@ function drawPlayer(){
   if(performance.now()<game.invulnerableUntil && Math.floor(performance.now()/100)%2===0) return;
   const x=game.playerX,y=game.playerY;
 
-  ctx.fillStyle = game.gravityDir !== "DOWN" ? "#0066ff" : "#70e8ff"; // Blue SOUL indicator
+  ctx.fillStyle = "#70e8ff";
   ctx.beginPath();
   ctx.moveTo(x+5, y); ctx.lineTo(x+10, y+8); ctx.lineTo(x+7, y+6);
   ctx.lineTo(x+5, y+8); ctx.lineTo(x+3, y+6); ctx.lineTo(x, y+8);
@@ -999,6 +986,9 @@ function drawBullet(b){
     ctx.lineTo(b.x - 2, b.y + 6); ctx.lineTo(b.x - 2, b.y);
     ctx.lineTo(b.x + 2, b.y); ctx.lineTo(b.x + 2, b.y + 6);
     ctx.lineTo(b.x + 4, b.y + 6); ctx.closePath(); ctx.fill();
+  }else if(b.owner==="sans_pellet"){
+    ctx.fillStyle="#ffffff";
+    ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
   }else if(b.owner==="boss"){
     ctx.fillStyle="#ff8800";
     ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
