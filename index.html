@@ -59,7 +59,7 @@ let buffer = "";
 
 const W = canvas.width, H = canvas.height;
 
-// Input State tracking for smooth movement
+// Input state tracking for smooth delta-time movement
 const inputs = {
   left: false,
   right: false
@@ -72,7 +72,7 @@ const game = {
   stage: 1,
   playerX: W / 2 - 8,
   playerY: H - 28,
-  playerSpeed: 0.16, // Pixels per millisecond speed for smooth movement
+  playerSpeed: 0.16, // Pixels per millisecond speed
   lastPlayerShootTime: 0,
   bullets: [],
   enemies: [],
@@ -276,7 +276,7 @@ function shoot(){
 function updateEnemies(dt){
   const speed = getSpeedMultiplier();
 
-  // Smooth Enemy Grid Movement (Sine Wave Floating + Continuous Lateral Shift)
+  // Smooth Enemy Movement
   const alive = game.enemies.filter(e => e.alive);
   if(alive.length){
     let minX = Math.min(...alive.map(e => e.x));
@@ -343,7 +343,9 @@ function bossShoot(){
       const px = game.playerX + 8;
       const py = game.playerY + 6;
       const angleToPlayer = Math.atan2(py - centerY, px - centerX);
-      const spread = [-0.25, 0, 0.25];
+      
+      // Spray attack updated to 2 bullets
+      const spread = [-0.15, 0.15];
 
       for(let offset of spread){
         const angle = angleToPlayer + offset;
@@ -409,7 +411,7 @@ function update(dt){
 
   const difficulty=getSpeedMultiplier();
 
-  // Smooth Continuous Player Movement
+  // Smooth Player Movement
   if(inputs.left) game.playerX -= game.playerSpeed * dt;
   if(inputs.right) game.playerX += game.playerSpeed * dt;
   game.playerX = Math.max(0, Math.min(W - 16, game.playerX));
