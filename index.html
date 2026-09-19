@@ -243,7 +243,6 @@ function spawnStage(){
   stopMusic();
   setStatus('STAGE '+game.stage);
   
-  // Scaling unit density and rows after each boss clear
   const baseRows=3+Math.floor((game.stage-1)/2);
   const bossBonusRows=Math.min(3, game.bossesDefeated);
   const rows=Math.min(6, baseRows+bossBonusRows);
@@ -255,7 +254,6 @@ function spawnStage(){
     if(r===0) type='top';
     else if(r<3||(r<4&&game.bossesDefeated>1)) type='middle';
     
-    // Units become tougher as boss defeats increase
     let hp=1;
     if(type==='top'&&game.bossesDefeated>=2) hp=2;
     if(type==='middle'&&game.bossesDefeated>=4) hp=2;
@@ -443,12 +441,10 @@ function updateBoss(dt){
     game.bossShootTimer=0;
     const cx=b.x+b.w/2,cy=b.y+b.h;
     
-    // Undertale Pattern Selection based on Boss Type & Phase
     const patternType = (b.typeIdx + game.bossPatternStep) % 3;
     game.bossPatternStep++;
 
     if(patternType === 0){
-      // Pattern 1: Rotating Ring Pattern
       const count = 8;
       for(let i=0; i<count; i++){
         const angle = game.bossPatternAngle + (i * (Math.PI * 2 / count));
@@ -458,7 +454,6 @@ function updateBoss(dt){
       }
       game.bossPatternAngle += 0.2;
     }else if(patternType === 1){
-      // Pattern 2: Target Aimed Spiral Wave
       const angle = Math.atan2(game.playerY - cy, game.playerX - cx);
       for(let spread = -0.3; spread <= 0.3; spread += 0.3){
         const finalAngle = angle + spread;
@@ -467,7 +462,6 @@ function updateBoss(dt){
         game.bullets.push({x:cx, y:cy, vx, vy, owner:'boss'});
       }
     }else if(patternType === 2){
-      // Pattern 3: Rain Wave Sweep across Screen
       const numBullets = 4;
       for(let i=0; i<numBullets; i++){
         const sweepX = (cx - 40) + Math.random() * 80;
@@ -695,7 +689,6 @@ function draw(){
     drawPixelSprite(e.x,e.y,spr,e.hp>1?'#ffff00':(e.type==='top'?'#ff00ea':'#00f3ff'),1.2);
   }
 
-  // Exact UI and Visual Preserved with Boss Type Colors
   if(game.boss){
     const b=game.boss;
     ctx.fillStyle=b.color;
