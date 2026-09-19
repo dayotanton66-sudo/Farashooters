@@ -23,7 +23,6 @@ button:active{transform:translate(2px,2px);box-shadow:0px 0px 0px #00f3ff;backgr
 #log{text-align:left;background:#000;border:1px solid #00f3ff;padding:4px;height:32px;overflow:hidden;font:9px 'Courier New',monospace;color:#00f3ff;width:100%;max-width:500px;opacity:0.8}
 .hint{font-size:9px;color:#888;margin-top:2px}
 
-/* Responsive Fullscreen Canvas Zoom Fit */
 :fullscreen #app, :-webkit-full-screen #app{max-width:100vw;max-height:100vh;padding:0;background:#000;justify-content:center}
 :fullscreen header, :-webkit-full-screen header,
 :fullscreen .row, :-webkit-full-screen .row,
@@ -166,7 +165,15 @@ const game={
   lastShoot:0,bullets:[],enemies:[],particles:[],texts:[],drops:[],bunkers:[],
   invaderDir:1,invaderStepTimer:0,invaderStepInterval:500,invaderFrame:0,
   stageClearTimer:0,invulnerableUntil:0,
-  message:'',messageUntil:0,boss:null,bossShootTimer:0
+  message:'',messageUntil:0,boss:null,bossShootTimer:0,
+  // Undertale Boss Mechanics Mechanics
+  bossPhase:'turn_menu', // 'turn_menu', 'enemy_attack', 'dialogue'
+  bossMenuOpt:0, // 0: FIGHT, 1: ACT, 2: ITEM, 3: MERCY
+  bossMercyReady:false,
+  bossTurnTimer:0,
+  bossPattern:0,
+  bossDialogueText:'',
+  bossDialogueUntil:0
 };
 
 function setStatus(t){statusEl.textContent=t}
@@ -247,9 +254,59 @@ function spawnBoss(){
   const hp=150+game.stage*30;
   game.boss={type:'space_dreadnought',title:'BOSS',x:W/2-20,y:20,w:40,h:18,hp,maxHp:hp,dir:1,speed:.06*DIFF[game.difficultyIdx].speed};
   game.bossShootTimer=0;
+  game.bossPhase='turn_menu';
+  game.bossMenuOpt=0;
+  game.bossMercyReady=false;
   game.message='WARNING: BOSS';
   game.messageUntil=performance.now()+1500;
   playBossMusic();
+}
+
+function startBossAttackPhase(){
+  game.bossPhase='enemy_attack';
+  game.bossTurnTimer=performance.now()+4000;
+  game.bossPattern=(game.bossPattern+1)%3;
+  game.bullets=[];
+}
+
+function triggerUndertaleAction(){
+  if(!game.boss) return;
+  if(game.bossPhase==='turn_menu'){
+    if(game.bossMenuOpt===0){ // FIGHT
+      game.boss.hp=Math.max(0, game.boss.hp-30);
+      sfx.hit();
+      addFloatingText('-30', game.boss.x+game.boss.w/2, game.boss.y, '#ff00ea');
+      if(game.boss.hp<=0){
+        defeatBoss();
+        return;
+      }
+      startBossAttackPhase();
+    }else if(game.bossMenuOpt===1){ // ACT
+      game.bossDialogueText='YOU COMMUNICATED WITH THE DREADNOUGHT...';
+      game.bossDialogueUntil=performance.now()+1500;
+      game.bossPhase='dialogue';
+      game.bossMercyReady=true;
+    }else if(game.bossMenuOpt===2){ // ITEM
+      game.lives=Math.min(5, game.lives+1);
+      sfx.clear();
+      addFloatingText('+1 LIFE', game.playerX, game.playerY, '#00f3ff');
+      startBossAttackPhase();
+    }else if(game.bossMenuOpt===3){ // MERCY
+      if(game.bossMercyReady){
+        defeatBoss();
+      }else{
+        game.bossDialogueText='BOSS IS NOT READY TO BE SPARED!';
+        game.bossDialogueUntil=performance.now()+1200;
+        game.bossPhase='dialogue';
+      }
+    }
+  }
+}
+
+function defeatBoss(){
+  game.boss=null;stopMusic();sfx.clear();
+  game.bullets=[];
+  game.stageClearTimer=performance.now()+1200;
 }
 
 function checkComboBomb(){
@@ -266,7 +323,11 @@ function handleAction(){
     if(game.overlayOption===0) resetGame();
     else returnToMenu();
   }else if(game.screen==='playing'){
-    shoot();
+    if(game.boss && game.bossPhase==='turn_menu'){
+      triggerUndertaleAction();
+    }else{
+      shoot();
+    }
   }
 }
 
@@ -292,6 +353,8 @@ function handleLeft(){
     game.difficultyIdx=(game.difficultyIdx+2)%3;
   }else if(game.screen==='gameover'||game.screen==='won'||game.screen==='paused'){
     game.overlayOption=0;
+  }else if(game.boss && game.bossPhase==='turn_menu'){
+    game.bossMenuOpt=(game.bossMenuOpt+3)%4;
   }else{
     inputs.left=true;inputs.right=false;
   }
@@ -303,6 +366,8 @@ function handleRight(){
     game.difficultyIdx=(game.difficultyIdx+1)%3;
   }else if(game.screen==='gameover'||game.screen==='won'||game.screen==='paused'){
     game.overlayOption=1;
+  }else if(game.boss && game.bossPhase==='turn_menu'){
+    game.bossMenuOpt=(game.bossMenuOpt+1)%4;
   }else{
     inputs.right=true;inputs.left=false;
   }
@@ -391,12 +456,37 @@ function updateBoss(dt){
   b.x+=b.dir*b.speed*dt;
   if(b.x<=4){b.x=4;b.dir=1}else if(b.x+b.w>=W-4){b.x=W-4-b.w;b.dir=-1}
 
-  game.bossShootTimer+=dt;
-  if(game.bossShootTimer>=1500){
-    game.bossShootTimer=0;
-    const cx=b.x+b.w/2,cy=b.y+b.h;
-    for(const vx of[-.06,0,.06]){
-      game.bullets.push({x:cx,y:cy,vx:vx*DIFF[game.difficultyIdx].speed,vy:.12*DIFF[game.difficultyIdx].speed,owner:'boss'});
+  if(game.bossPhase==='dialogue'){
+    if(performance.now()>=game.bossDialogueUntil){
+      startBossAttackPhase();
+    }
+    return;
+  }
+
+  if(game.bossPhase==='enemy_attack'){
+    if(performance.now()>=game.bossTurnTimer){
+      game.bossPhase='turn_menu';
+      game.bullets=[];
+      return;
+    }
+
+    game.bossShootTimer+=dt;
+    if(game.bossShootTimer>=400){
+      game.bossShootTimer=0;
+      const cx=b.x+b.w/2,cy=b.y+b.h;
+      
+      // Undertale-inspired Pattern Spawns
+      if(game.bossPattern===0){ // Ring Pattern
+        for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+          game.bullets.push({x:cx,y:cy,vx:Math.cos(a)*0.08,vy:Math.sin(a)*0.08+0.05,owner:'boss'});
+        }
+      }else if(game.bossPattern===1){ // Target Wave
+        const angle=Math.atan2(game.playerY-cy, game.playerX-cx);
+        game.bullets.push({x:cx,y:cy,vx:Math.cos(angle)*0.12,vy:Math.sin(angle)*0.12,owner:'boss'});
+      }else{ // Screen Sweep
+        const sweepX=Math.random()*W;
+        game.bullets.push({x:sweepX,y:10,vx:0,vy:0.1,owner:'boss'});
+      }
     }
   }
 }
@@ -462,8 +552,7 @@ function update(dt){
       b.y=-20;game.boss.hp--;game.score+=10;
       sfx.hit();
       if(game.boss.hp<=0){
-        game.boss=null;stopMusic();sfx.clear();
-        game.stageClearTimer=performance.now()+1200;
+        defeatBoss();
       }
       continue;
     }
@@ -562,6 +651,27 @@ function drawModal(title,sub,opt1,opt2){
   text(opt2,175,125,8,'center',b2Sel?'#ff00ea':'#00f3ff');
 }
 
+function drawUndertaleBossUI(){
+  if(!game.boss) return;
+  
+  if(game.bossPhase==='turn_menu'){
+    ctx.strokeStyle='#00f3ff';ctx.lineWidth=1;
+    ctx.strokeRect(20, H-45, W-40, 25);
+    
+    const opts=['FIGHT','ACT','ITEM','MERCY'];
+    opts.forEach((o,i)=>{
+      const isSel=game.bossMenuOpt===i;
+      const color=isSel?'#ff00ea':'#00f3ff';
+      const colColor=(i===3&&game.bossMercyReady)?'#ffff00':color;
+      text((isSel?'>':'')+o, 30+i*70, H-28, 8, 'left', colColor);
+    });
+  }else if(game.bossPhase==='dialogue'){
+    ctx.strokeStyle='#00f3ff';ctx.lineWidth=1;
+    ctx.strokeRect(20, H-45, W-40, 25);
+    text(game.bossDialogueText, W/2, H-28, 7, 'center', '#ff00ea');
+  }
+}
+
 function draw(){
   ctx.save();
   if(shakeAmount>0){
@@ -618,6 +728,7 @@ function draw(){
     drawPixelSprite(e.x,e.y,spr,e.type==='top'?'#ff00ea':'#00f3ff',1.2);
   }
 
+  // Exact Boss Appearance Preserved
   if(game.boss){
     const b=game.boss;
     ctx.fillStyle='#ff00ea';
@@ -626,6 +737,8 @@ function draw(){
     ctx.fillRect(b.x+4,b.y+4,8,4);ctx.fillRect(b.x+b.w-12,b.y+4,8,4);
     ctx.fillStyle='#ff00ea';
     ctx.fillRect(40,14,Math.max(0,240*(b.hp/b.maxHp)),2);
+    
+    drawUndertaleBossUI();
   }
 
   if(performance.now()>=game.invulnerableUntil||Math.floor(performance.now()/60)%2===0){
@@ -746,7 +859,6 @@ document.getElementById('disconnect').onclick=disconnectArduino;
 document.getElementById('menuBtn').onclick=togglePause;
 document.getElementById('restartBtn').onclick=resetGame;
 
-// Fullscreen Zoom Handler
 document.getElementById('fullscreenBtn').onclick=async()=>{
   const target=document.getElementById('app');
   try{
