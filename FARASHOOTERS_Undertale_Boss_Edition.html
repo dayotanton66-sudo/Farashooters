@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FARASHOOTERS - Boss Edition</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;background:#050814;color:#fff;font-family:Arial,sans-serif;overflow:hidden}
+body{display:flex;justify-content:center;align-items:center;padding:10px}
+#app{width:100%;height:100%;max-width:760px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+h1{margin:0 0 2px;font-size:24px;letter-spacing:3px}
+#status{min-height:20px;margin:2px 0 5px;font-size:13px;color:#9ee7ff}
+#screenWrap{width:100%;flex:1;display:flex;justify-content:center;align-items:center;min-height:0}
+canvas{max-width:100%;max-height:100%;aspect-ratio:4/3;background:#02040b;border:2px solid #4b6380;border-radius:8px;image-rendering:pixelated;touch-action:none;object-fit:contain}
+.row{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:5px;width:100%}
+button{border:1px solid #60748c;border-radius:10px;background:#172235;color:#fff;padding:8px 13px;font-size:14px;min-width:88px;touch-action:manipulation;cursor:pointer}
+button:active{transform:scale(.97);background:#263752}
+.btn-danger{background:#3a171d;border-color:#8c3542}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;width:100%;max-width:640px}
+.controls button{min-width:0;font-size:20px;padding:10px 6px}
+#log{margin-top:5px;text-align:left;background:#02040b;border:1px solid #28374a;border-radius:8px;padding:6px;height:54px;overflow:auto;font:11px monospace;white-space:pre-wrap;width:100%;max-width:640px}
+.hint{font-size:11px;opacity:.75;margin-top:3px}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
+#overlay.show{display:flex}
+.panel{width:min(420px,94vw);background:#07101d;border:2px solid #7a91ac;border-radius:14px;padding:20px;box-shadow:0 0 30px rgba(0,0,0,.5)}
+.panel h2{margin:0 0 8px;font-family:monospace;letter-spacing:2px}
+.panel p{margin:7px 0 14px;color:#c9d7e8;font:13px monospace;line-height:1.45}
+.panel .actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.panel .actions button{min-width:120px}
+@media (orientation:landscape) and (max-height:500px){
+ h1,#status,.hint,#log,.row{display:none}
+ #app{padding:3px}
+ .controls{height:46px;margin-top:3px}
+ .controls button{padding:4px;font-size:20px}
+}
+:fullscreen body,:-webkit-full-screen body{padding:0;margin:0;background:#000}
+:fullscreen #app, :-webkit-full-screen #app{width:100vw;height:100vh;max-width:100vw;padding:4px 10px;justify-content:space-between}
+:fullscreen h1,:fullscreen #status,:fullscreen .hint,:fullscreen #log,:fullscreen .row,
+:-webkit-full-screen h1, :-webkit-full-screen #status, :-webkit-full-screen .hint, :-webkit-full-screen #log, :-webkit-full-screen .row{display:none}
+:fullscreen #screenWrap, :-webkit-full-screen #screenWrap{flex:1;width:100%;height:100%;display:flex;justify-content:center;align-items:center;min-height:0}
+:fullscreen canvas, :-webkit-full-screen canvas{height:100%;width:auto;max-width:100%;max-height:100%;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="app">
+<h1>FARASHOOTERS</h1>
+<div id="status">Not connected</div>
+<div id="screenWrap"><canvas id="game" width="320" height="240"></canvas></div>
+<div class="row">
+<button id="connect">CONNECT</button>
+<button id="disconnect">DISCONNECT</button>
+<button id="menuBtn" class="btn-danger">MENU</button>
+<button id="restartBtn">RESTART</button>
+<button id="fullscreenBtn">FULLSCREEN</button>
+</div>
+<div class="controls">
+<button id="left">◀</button><button id="shoot">●</button><button id="right">▶</button>
+</div>
+<div class="hint">D1 = SHOOT • D2 = RIGHT • D3 = LEFT • ESC = MENU</div>
+<div id="log">Waiting for input...</div>
+</div>
+<div id="overlay">
+ <div class="panel">
+  <h2 id="overlayTitle">GAME OVER</h2>
+  <p id="overlayText"></p>
+  <div class="actions">
+   <button id="overlayRestart">RESTART</button>
+   <button id="overlayMenu" class="btn-danger">RETURN TO MENU</button>
+  </div>
+ </div>
+</div>
+<script>
+"use strict";
+const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+const statusEl=document.getElementById("status"),logEl=document.getElementById("log");
+const overlay=document.getElementById("overlay"),overlayTitle=document.getElementById("overlayTitle"),overlayText=document.getElementById("overlayText");
+const W=canvas.width,H=canvas.height;
+let port=null,reader=null,readLoopRunning=false,buffer="";
+let audioCtx=null,musicTimer=null,musicIndex=0;
+const F={C3:130.81,D3:146.83,Eb3:155.56,E3:164.81,F3:174.61,G3:196,Ab3:207.65,Bb3:233.08,C4:261.63,D4:293.66,Eb4:311.13,E4:329.63,F4:349.23,G4:392,Ab4:415.3,Bb4:466.16,C5:523.25,D5:587.33,Eb5:622.25,E5:659.25,F5:698.46,G5:783.99,Ab5:830.61,Bb5:932.33,C6:1046.5,D6:1174.66,Eb6:1244.51,E6:1318.51,F6:1396.91,G6:1567.98,REST:0};
+// These are original chip-synth patterns, not recordings or transcriptions of Undertale songs.
+const bossTracks={
+ toriel:{name:"Toriel • original gentle theme",tempo:300,notes:[['C5','C3'],['G4','C3'],['Eb4','G3'],['G4','C3'],['C5','Ab3'],['Bb4','F3'],['G4','C3'],['Eb5','G3']]},
+ papyrus:{name:"Papyrus • original heroic theme",tempo:190,notes:[['C5','C3'],['E5','C3'],['G5','G3'],['E5','C3'],['D5','D3'],['F5','D3'],['A5','A3'],['F5','D3']]},
+ undyne:{name:"Undyne • original battle theme",tempo:125,notes:[['E5','E3'],['E5','G3'],['G5','B3'],['B5','E3'],['A5','C4'],['G5','E3'],['F5','A3'],['E5','E3']]},
+ sans:{name:"Sans • original sparse battle theme",tempo:220,notes:[['D5','D3'],['REST','A3'],['F5','D3'],['REST','A3'],['D5','F3'],['C5','A3'],['Bb4','D3'],['REST','A3']]},
+ asriel:{name:"Asriel • original celestial finale",tempo:145,notes:[['C5','C3'],['E5','G3'],['G5','C4'],['C6','G3'],['Bb5','Eb4'],['G5','C4'],['E5','G3'],['D5','C3']]}
+};
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();}
+function tone(freq,type,dur,vol){if(!audioCtx||freq<=0)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)}
+const sfx={shoot(){initAudio();tone(880,'square',.07,.045);},hit(){initAudio();tone(150,'sawtooth',.09,.08);},damage(){initAudio();tone(100,'triangle',.25,.14);},clear(){initAudio();tone(F.C5,'square',.08,.06);setTimeout(()=>tone(F.E5,'square',.08,.06),80);setTimeout(()=>tone(F.G5,'square',.15,.06),160);}};
+function playBossMusic(type){initAudio();stopMusic();const t=bossTracks[type];if(!t)return;musicIndex=0;setStatus(t.name);musicTimer=setInterval(()=>{const n=t.notes[musicIndex];tone(F[n[0]],'square',t.tempo/1000*.8,.035);tone(F[n[1]],'triangle',t.tempo/1000,.045);musicIndex=(musicIndex+1)%t.notes.length},t.tempo)}
+function stopMusic(){if(musicTimer){clearInterval(musicTimer);musicTimer=null}}
+const DIFF=[{name:'EASY',speed:.7,delay:1.4,lives:5},{name:'NORMAL',speed:1,delay:1,lives:3},{name:'HARD',speed:1.35,delay:.75,lives:3},{name:'BULLET HELL',speed:1.7,delay:.45,lives:2}];
+const inputs={left:false,right:false};
+const game={screen:'menu',difficultyIdx:1,score:0,lives:3,stage:1,cannons:1,playerX:W/2-5,playerY:H-24,playerSpeed:.16,lastShoot:0,bullets:[],enemies:[],lasers:[],sabres:[],enemyDir:1,stageClearTimer:0,invulnerableUntil:0,message:'',messageUntil:0,boss:null,bossShootTimer:0,nextBossShootInterval:2400};
+function setStatus(t){statusEl.textContent=t}
+function log(t){logEl.textContent=t+'\n'+logEl.textContent;logEl.textContent=logEl.textContent.split('\n').slice(0,10).join('\n')}
+function getSpeed(){return Math.pow(1.03,game.stage-1)*DIFF[game.difficultyIdx].speed}
+function resetGame(){stopMusic();hideOverlay();game.screen='playing';game.score=0;game.lives=DIFF[game.difficultyIdx].lives;game.stage=1;game.cannons=1;game.playerX=W/2-5;game.playerY=H-24;game.lastShoot=0;game.bullets=[];game.enemies=[];game.lasers=[];game.sabres=[];game.stageClearTimer=0;game.invulnerableUntil=0;game.boss=null;game.message='STAGE 1';game.messageUntil=performance.now()+1000;spawnCurrentStage()}
+function returnToMenu(){stopMusic();hideOverlay();game.screen='menu';game.bullets=[];game.enemies=[];game.lasers=[];game.sabres=[];game.boss=null;inputs.left=inputs.right=false;setStatus('Menu')}
+function showOverlay(title,msg){overlayTitle.textContent=title;overlayText.textContent=msg;overlay.classList.add('show')}
+function hideOverlay(){overlay.classList.remove('show')}
+function finishGame(won){game.screen=won?'won':'gameover';stopMusic();showOverlay(won?'VICTORY':'GAME OVER',won?'You cleared every boss stage.':'Stage '+game.stage+' • Score '+game.score)}
+function spawnCurrentStage(){game.lasers=[];game.sabres=[];if(game.stage%5===0)spawnBoss();else spawnStage()}
+function randomInterval(){const d=DIFF[game.difficultyIdx],s=getSpeed();return Math.max(650,(2500/s)*d.delay)+Math.random()*Math.max(700,(4500/s)*d.delay)}
+function spawnStage(){game.enemies=[];game.bullets=[];game.boss=null;game.enemyDir=1;const rows=Math.min(2+Math.floor((game.stage-1)/2),4),cols=Math.min(6+Math.floor((game.stage-1)/3),8),gapX=32,gapY=23,startX=(W-(cols-1)*gapX)/2-10;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){let type='standard',hp=1;if(game.stage>4){const q=Math.random();if(q<.2){type='tank';hp=4}else if(q<.4)type='flash';else if(q<.6)type='spread'}game.enemies.push({x:startX+c*gapX,y:35+r*gapY,w:20,h:15,type,hp,maxHp:hp,alive:true,shootTimer:Math.random()*900,nextShootInterval:randomInterval()})}game.message='STAGE '+game.stage;game.messageUntil=performance.now()+900}
+function spawnBoss(){game.enemies=[];game.bullets=[];game.lasers=[];game.sabres=[];let base=360,type='toriel',title='TORIEL';if(game.stage===10){base=540;type='papyrus';title='PAPYRUS'}else if(game.stage===15){base=720;type='undyne';title='UNDYNE'}else if(game.stage===20){base=1080;type='sans';title='SANS'}else if(game.stage>=25){base=1620;type='asriel';title='ASRIEL'}let hp=Math.floor(base*(1+.3*(game.cannons-1)));if(game.difficultyIdx===3)hp=Math.floor(hp*1.3);game.boss={type,title,x:W/2-32,y:28,w:64,h:34,hp,maxHp:hp,dir:1,speed:.075*getSpeed(),pattern:0,patternTimer:0,immortal:false,immortalTimer:0};game.bossShootTimer=0;game.nextBossShootInterval=2200*DIFF[game.difficultyIdx].delay;game.message='BOSS: '+title;game.messageUntil=performance.now()+1600;playBossMusic(type)}
+function shoot(){if(game.screen==='menu'||game.screen==='gameover'||game.screen==='won'){resetGame();return}if(game.screen!=='playing')return;initAudio();const now=performance.now();if(now-game.lastShoot<105)return;if(game.bullets.filter(b=>b.owner==='player').length>=24)return;const cx=game.playerX+5,cy=game.playerY;if(game.cannons===1)game.bullets.push({x:cx,y:cy,vx:0,vy:-.32,owner:'player'});else if(game.cannons===2){game.bullets.push({x:cx-3,y:cy,vx:0,vy:-.32,owner:'player'},{x:cx+3,y:cy,vx:0,vy:-.32,owner:'player'})}else{const n=Math.min(5,game.cannons);for(let i=0;i<n;i++){const off=i-(n-1)/2;game.bullets.push({x:cx+off*3,y:cy,vx:off*.025,vy:-.32,owner:'player'})}}game.lastShoot=now;sfx.shoot()}
+function summon(n,type){const alive=game.enemies.length;const add=Math.min(n,8-alive);for(let i=0;i<add;i++)game.enemies.push({x:(W/(add+1))*(i+1)-10,y:game.boss?game.boss.y+game.boss.h+8:45,w:20,h:15,type,hp:1,maxHp:1,alive:true,shootTimer:0,nextShootInterval:randomInterval()})}
+function pelletCorridor(){const total=32,gap=4,spacing=W/total,start=Math.floor(Math.random()*(total-gap));for(let i=0;i<total;i++){if(i>=start&&i<start+gap)continue;game.bullets.push({x:i*spacing+spacing/2,y:game.boss?game.boss.y+game.boss.h:15,vx:0,vy:.035*getSpeed(),owner:'sans_pellet'})}}
+function bossShoot(){const b=game.boss;if(!b)return;const s=getSpeed(),d=DIFF[game.difficultyIdx],cx=b.x+b.w/2,cy=b.y+b.h/2;let delay=2200*d.delay,mode=b.pattern%3;if(b.type==='toriel'){if(mode===0){for(let i=0;i<8;i++){const a=b.patternTimer*.12+i*Math.PI/4;game.bullets.push({x:cx,y:cy,vx:Math.cos(a)*.08*s,vy:Math.sin(a)*.08*s,owner:'boss'})}delay=1400*d.delay}else if(mode===1){for(let i=0;i<5;i++)game.bullets.push({x:Math.random()*(W-20)+10,y:8,vx:0,vy:.13*s,owner:'boss'});delay=1800*d.delay}else{summon(2,'flame_sentinel');delay=3000*d.delay}}
+else if(b.type==='papyrus'){if(mode===0){const gap=Math.floor(Math.random()*6);for(let i=0;i<8;i++)if(i!==gap&&i!==gap+1)game.bullets.push({x:i*40+20,y:8,vx:0,vy:.11*s,owner:'boss'});delay=2000*d.delay}else if(mode===1){for(const vx of[-.09,-.03,.03,.09])game.bullets.push({x:cx,y:cy,vx:vx*s,vy:.14*s,owner:'boss'});delay=1800*d.delay}else{summon(3,'guard_dog');delay=3200*d.delay}}
+else if(b.type==='undyne'){if(mode===0){for(const vx of[-.07,-.035,0,.035,.07])game.bullets.push({x:cx,y:b.y+b.h,vx:vx*s,vy:.18*s,owner:'undyne_spear'});delay=1700*d.delay}else if(mode===1){for(let i=0;i<8;i++){const a=i*Math.PI/4;game.bullets.push({x:cx,y:cy,vx:Math.cos(a)*.1*s,vy:Math.sin(a)*.1*s,owner:'boss'})}delay=2200*d.delay}else{summon(4,'royal_spearsman');delay=3500*d.delay}}
+else if(b.type==='sans'){const m=b.pattern%4;if(m===0){pelletCorridor();game.message='PELLET CORRIDOR — FIND THE GAP';game.messageUntil=performance.now()+1100;delay=3000*d.delay}else if(m===1){game.lasers.push({x:game.playerX-10,y:0,w:30,h:H,timer:1500,warning:true});delay=2800*d.delay}else if(m===2){const gap=Math.floor(Math.random()*8);for(let i=0;i<10;i++)if(i!==gap)game.bullets.push({x:i*32+16,y:b.y+b.h,vx:0,vy:.11*s,owner:'boss'});delay=2200*d.delay}else{summon(4,'phantom_blaster');delay=3600*d.delay}}
+else{const m=b.pattern%4;if(m===0){game.sabres.push({targetX:game.playerX+5,targetY:game.playerY+5,timer:1100,slashing:false});delay=2400*d.delay}else if(m===1){for(let i=0;i<6;i++)game.bullets.push({x:Math.random()*(W-20)+10,y:8,vx:(Math.random()-.5)*.04*s,vy:.12*s,owner:'asriel_star'});delay=1900*d.delay}else if(m===2){game.lasers.push({x:20,y:0,w:25,h:H,timer:1300,warning:true},{x:W-45,y:0,w:25,h:H,timer:1300,warning:true});delay=2700*d.delay}else{summon(5,'astral_entity');delay=3900*d.delay}}
+b.pattern++;b.patternTimer++;game.nextBossShootInterval=delay}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function playerBox(){return{x:game.playerX+3,y:game.playerY+2,w:4,h:4}}
+function loseLife(){const now=performance.now();if(now<game.invulnerableUntil||game.screen!=='playing')return;game.lives--;sfx.damage();game.invulnerableUntil=now+1200;game.message='HIT! LIVES: '+Math.max(0,game.lives);game.messageUntil=now+800;if(game.lives<=0)finishGame(false)}
+function updateEnemies(dt){const s=getSpeed(),alive=game.enemies.filter(e=>e.alive);if(alive.length&&!game.boss){const min=Math.min(...alive.map(e=>e.x)),max=Math.max(...alive.map(e=>e.x)),step=.035*s*dt*game.enemyDir;if(max>=W-24&&game.enemyDir>0){game.enemyDir=-1;alive.forEach(e=>e.y+=5)}else if(min<=4&&game.enemyDir<0){game.enemyDir=1;alive.forEach(e=>e.y+=5)}else alive.forEach(e=>e.x+=step)}for(const e of game.enemies){if(!e.alive)continue;e.shootTimer+=dt;if(e.shootTimer<e.nextShootInterval)continue;e.shootTimer=0;e.nextShootInterval=randomInterval();const x=e.x+10,y=e.y+14;if(e.type==='flame_sentinel')game.bullets.push({x,y,vx:(game.playerX-e.x)*.0004*s,vy:.1*s,owner:'boss'});else if(e.type==='guard_dog')game.bullets.push({x,y,vx:0,vy:.16*s,owner:'boss'});else if(e.type==='royal_spearsman')game.bullets.push({x,y,vx:0,vy:.2*s,owner:'undyne_spear'});else if(e.type==='phantom_blaster')game.lasers.push({x:e.x-5,y:0,w:12,h:H,timer:800,warning:true});else if(e.type==='astral_entity'){const a=Math.atan2(game.playerY-e.y,game.playerX-e.x);game.bullets.push({x,y,vx:Math.cos(a)*.11*s,vy:Math.sin(a)*.11*s,owner:'asriel_star'})}else if(e.type==='flash')game.bullets.push({x,y,vx:0,vy:.22*s,owner:'enemy'});else if(e.type==='spread')game.bullets.push({x,y,vx:-.05*s,vy:.11*s,owner:'enemy'},{x,y,vx:0,vy:.11*s,owner:'enemy'},{x,y,vx:.05*s,vy:.11*s,owner:'enemy'});else game.bullets.push({x,y,vx:0,vy:.11*s,owner:'enemy'})}}
+function updateLasers(dt){const p=playerBox();for(let i=game.lasers.length-1;i>=0;i--){const l=game.lasers[i];l.timer-=dt;if(l.timer<300){l.warning=false;if(hit(p,{x:l.x,y:l.y,w:l.w,h:l.h}))loseLife()}if(l.timer<=0)game.lasers.splice(i,1)}}
+function updateSabres(dt){const p=playerBox(),s=getSpeed();for(let i=game.sabres.length-1;i>=0;i--){const a=game.sabres[i];a.timer-=dt;if(a.timer<300&&!a.slashing){a.slashing=true;sfx.hit();for(const d of[[0,-.15],[0,.15],[-.15,0],[.15,0]])game.bullets.push({x:a.targetX,y:a.targetY,vx:d[0]*s,vy:d[1]*s,owner:'asriel_star'})}if(a.slashing&&hit(p,{x:a.targetX-15,y:a.targetY-15,w:30,h:30}))loseLife();if(a.timer<=0)game.sabres.splice(i,1)}}
+function killBoss(){game.boss=null;game.bullets=[];game.enemies=[];game.lasers=[];game.sabres=[];stopMusic();sfx.clear();game.stageClearTimer=performance.now()+1500;game.cannons++;if(game.stage>=25){finishGame(true)}else{game.message='BOSS DEFEATED! CANNON +1';game.messageUntil=performance.now()+1400}}
+function update(dt){if(game.screen!=='playing')return;if(inputs.left)game.playerX-=game.playerSpeed*dt;if(inputs.right)game.playerX+=game.playerSpeed*dt;game.playerX=Math.max(0,Math.min(W-10,game.playerX));updateLasers(dt);updateSabres(dt);if(game.boss){const b=game.boss;b.x+=b.dir*b.speed*dt;if(b.x<=4){b.x=4;b.dir=1}else if(b.x+b.w>=W-4){b.x=W-4-b.w;b.dir=-1}if(b.immortal){b.immortalTimer-=dt;if(b.immortalTimer<=0){killBoss();return}}game.bossShootTimer+=dt;if(game.bossShootTimer>=game.nextBossShootInterval){game.bossShootTimer=0;bossShoot()}}updateEnemies(dt);for(const bullet of game.bullets){bullet.x+=(bullet.vx||0)*dt;bullet.y+=bullet.vy*dt;if(bullet.owner==='asriel_star'&&bullet.y>H*.45&&!bullet.split){bullet.split=true;const n=game.difficultyIdx===3?6:4;for(let i=0;i<n;i++){const a=i*Math.PI*2/n;game.bullets.push({x:bullet.x,y:bullet.y,vx:Math.cos(a)*.06*getSpeed(),vy:Math.sin(a)*.06*getSpeed(),owner:'boss'})}}}game.bullets=game.bullets.filter(b=>b.x>-25&&b.x<W+25&&b.y>-25&&b.y<H+25);const p=playerBox();for(const b of game.bullets){if(b.owner==='player')continue;const r=b.owner==='undyne_spear'?{x:b.x-4,y:b.y,w:8,h:20}:b.owner==='sans_pellet'?{x:b.x-3,y:b.y-3,w:6,h:6}:{x:b.x-2,y:b.y-2,w:4,h:4};if(hit(r,p))loseLife()}for(const b of game.bullets){if(b.owner!=='player')continue;const r={x:b.x-1,y:b.y-5,w:2,h:7};if(game.boss&&hit(r,game.boss)){b.y=-30;if(!game.boss.immortal){game.boss.hp--;game.score+=25;sfx.hit();if(game.boss.hp<=0){if(game.boss.type==='undyne'){game.boss.hp=0;game.boss.immortal=true;game.boss.immortalTimer=9000;game.message='UNDYNE REFUSES TO FALL!';game.messageUntil=performance.now()+1600}else killBoss()}}continue}for(const e of game.enemies){if(!e.alive)continue;if(hit(r,e)){b.y=-30;e.hp--;sfx.hit();if(e.hp<=0){e.alive=false;game.score+=e.type==='tank'?40:e.type==='standard'?10:20}break}}}for(const e of game.enemies){if(!e.alive)continue;if(e.y+e.h>=game.playerY){e.alive=false;loseLife()}else if(hit(p,e))loseLife()}game.enemies=game.enemies.filter(e=>e.alive);if(!game.boss&&game.enemies.length===0&&game.stageClearTimer===0){sfx.clear();game.stageClearTimer=performance.now()+1200;game.message='STAGE CLEAR!';game.messageUntil=performance.now()+1000}if(game.stageClearTimer&&performance.now()>=game.stageClearTimer){game.stageClearTimer=0;game.stage++;game.lives++;spawnCurrentStage()}}
+function clearScreen(){ctx.fillStyle='#02040b';ctx.fillRect(0,0,W,H);ctx.fillStyle='#24364d';for(let i=0;i<45;i++)ctx.fillRect((i*73)%W,(i*47)%H,1,1)}
+function text(t,x,y,size=12,align='left',color='#fff'){ctx.fillStyle=color;ctx.font=size+'px monospace';ctx.textAlign=align;ctx.fillText(t,x,y)}
+function drawPlayer(){if(performance.now()<game.invulnerableUntil&&Math.floor(performance.now()/100)%2===0)return;const x=game.playerX,y=game.playerY;ctx.fillStyle='#70e8ff';ctx.beginPath();ctx.moveTo(x+5,y);ctx.lineTo(x+10,y+8);ctx.lineTo(x+7,y+6);ctx.lineTo(x+5,y+8);ctx.lineTo(x+3,y+6);ctx.lineTo(x,y+8);ctx.closePath();ctx.fill();ctx.fillStyle='#ffff55';if(game.cannons>=2){ctx.fillRect(x,y+3,1,3);ctx.fillRect(x+9,y+3,1,3)}if(game.cannons>=3)ctx.fillRect(x+4,y-1,2,2);ctx.fillStyle='#ff2255';ctx.fillRect(x+4,y+3,2,2)}
+function drawEnemy(e){const x=e.x,y=e.y;let c='#55ddff';if(e.type==='flame_sentinel'){c='#ff6600'}else if(e.type==='guard_dog'){c='#fff'}else if(e.type==='royal_spearsman'){c='#00aaff'}else if(e.type==='phantom_blaster'){c='#fff'}else if(e.type==='astral_entity'){c='#ff00ff'}else if(e.type==='tank'){c='#888'}else if(e.type==='flash'){c='#ffff00'}else if(e.type==='spread'){c='#ff55aa'}ctx.fillStyle=c;ctx.fillRect(x+2,y+2,16,11);ctx.fillStyle='#000';if(e.type==='guard_dog'){ctx.fillRect(x+5,y+5,3,3);ctx.fillRect(x+12,y+5,3,3)}else if(e.type==='tank'){ctx.fillStyle='#00ffcc';ctx.fillRect(x+5,y+4,10,7)}else if(e.type==='phantom_blaster'){ctx.fillStyle='#f00';ctx.fillRect(x+6,y+4,3,3);ctx.fillRect(x+11,y+4,3,3)}}
+function drawBoss(b){ctx.fillStyle=b.type==='sans'?'#d9d9e8':b.type==='undyne'?'#168cff':b.type==='asriel'?'#ffffff':b.type==='papyrus'?'#fff':'#f0b090';ctx.fillRect(b.x,b.y,b.w,b.h);ctx.fillStyle='#111';ctx.fillRect(b.x+14,b.y+10,8,8);ctx.fillRect(b.x+b.w-22,b.y+10,8,8);if(b.type==='sans'){ctx.fillStyle='#00eaff';ctx.fillRect(b.x+18,b.y+20,7,7);ctx.fillStyle='#fff';ctx.fillRect(b.x+b.w-25,b.y+20,7,7)}ctx.strokeStyle='#fff';ctx.strokeRect(b.x,b.y,b.w,b.h)}
+function draw(){clearScreen();text('SCORE '+game.score,6,12,10);text('LIVES '+game.lives,160,12,10,'center');text('STAGE '+game.stage,314,12,10,'right');if(game.screen==='menu'){text('FARASHOOTERS',W/2,70,22,'center','#70e8ff');text('CHOOSE DIFFICULTY',W/2,98,12,'center');text('< '+DIFF[game.difficultyIdx].name+' >',W/2,120,18,'center','#ffff55');text('LEFT / RIGHT TO CHANGE',W/2,145,10,'center');text('SHOOT TO START',W/2,165,10,'center');text('BOSSES EVERY 5 STAGES',W/2,185,10,'center','#9ee7ff');return}for(const b of game.bullets){ctx.fillStyle=b.owner==='player'?'#ffff55':b.owner==='sans_pellet'?'#fff':'#ff5566';ctx.fillRect(b.x-1,b.y-2,b.owner==='undyne_spear'?3:2,b.owner==='undyne_spear'?10:4)}for(const e of game.enemies)drawEnemy(e);for(const l of game.lasers){ctx.fillStyle=l.warning?'rgba(255,80,80,.22)':'rgba(255,0,0,.7)';ctx.fillRect(l.x,l.y,l.w,l.h)}for(const s of game.sabres){ctx.strokeStyle=s.slashing?'#fff':'rgba(255,255,255,.35)';ctx.strokeRect(s.targetX-15,s.targetY-15,30,30)}if(game.boss){drawBoss(game.boss);ctx.fillStyle='#300';ctx.fillRect(55,18,210,5);ctx.fillStyle='#f44';ctx.fillRect(55,18,210*(game.boss.hp/game.boss.maxHp),5);text(game.boss.title,W/2,32,9,'center','#fff')}drawPlayer();if(game.message&&performance.now()<game.messageUntil)text(game.message,W/2,90,12,'center','#fff')}
+let last=performance.now();function loop(now){const dt=Math.min(40,now-last);last=now;update(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+function supported(){return 'serial' in navigator}
+async function connectArduino(){initAudio();if(!supported()){setStatus('Web Serial not supported');return}try{setStatus('Selecting Arduino...');port=await navigator.serial.requestPort();await port.open({baudRate:115200});setStatus('Connected');resetGame();readLoop()}catch(e){setStatus('Connection failed');log('ERR: '+e.message)}}
+async function disconnectArduino(){try{if(reader){await reader.cancel();reader.releaseLock();reader=null}}catch(e){}try{if(port)await port.close()}catch(e){}port=null;setStatus('Disconnected')}
+async function readLoop(){if(!port||!port.readable||readLoopRunning)return;readLoopRunning=true;const decoder=new TextDecoder();try{reader=port.readable.getReader();while(true){const r=await reader.read();if(r.done)break;buffer+=decoder.decode(r.value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const raw of lines){const cmd=raw.trim().toUpperCase();if(cmd==='LEFT'){if(game.screen==='menu')game.difficultyIdx=(game.difficultyIdx+3)%4;else{inputs.left=true;inputs.right=false}}else if(cmd==='RIGHT'){if(game.screen==='menu')game.difficultyIdx=(game.difficultyIdx+1)%4;else{inputs.right=true;inputs.left=false}}else if(cmd==='RELEASE'){inputs.left=inputs.right=false}else if(cmd==='SHOOT')shoot()}}}catch(e){if(port)log('READ ERR: '+e.message)}finally{if(reader)reader.releaseLock();reader=null;readLoopRunning=false}}
+function bindHold(el,key){el.addEventListener('pointerdown',e=>{e.preventDefault();initAudio();if(game.screen==='menu'){if(key==='left')game.difficultyIdx=(game.difficultyIdx+3)%4;else game.difficultyIdx=(game.difficultyIdx+1)%4}else inputs[key]=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();inputs[key]=false}))}
+bindHold(document.getElementById('left'),'left');bindHold(document.getElementById('right'),'right');document.getElementById('shoot').addEventListener('pointerdown',e=>{e.preventDefault();shoot()});
+document.getElementById('connect').onclick=connectArduino;document.getElementById('disconnect').onclick=disconnectArduino;document.getElementById('menuBtn').onclick=returnToMenu;document.getElementById('restartBtn').onclick=resetGame;document.getElementById('overlayRestart').onclick=resetGame;document.getElementById('overlayMenu').onclick=returnToMenu;
+document.getElementById('fullscreenBtn').onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){log('Fullscreen unavailable')}};
+window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a'){inputs.left=true;if(game.screen==='menu')game.difficultyIdx=(game.difficultyIdx+3)%4}if(e.key==='ArrowRight'||e.key.toLowerCase()==='d'){inputs.right=true;if(game.screen==='menu')game.difficultyIdx=(game.difficultyIdx+1)%4}if(e.code==='Space'||e.key.toLowerCase()==='z'){e.preventDefault();shoot()}if(e.key==='Escape')returnToMenu()});window.addEventListener('keyup',e=>{if(['ArrowLeft','a','A'].includes(e.key))inputs.left=false;if(['ArrowRight','d','D'].includes(e.key))inputs.right=false});
+canvas.addEventListener('pointerdown',e=>{if(game.screen==='menu')shoot()});
+</script>
+</body>
+</html>
