@@ -447,11 +447,11 @@ function summonBossMinions(count, minionType){
 function spawnPelletCorridor(speed){
   const totalPellets = 32;
   const pelletSpacing = W / totalPellets;
-  const gapWidth = 4; // Gap width in pellets (safe corridor)
+  const gapWidth = 4;
   const gapStartIndex = Math.floor(Math.random() * (totalPellets - gapWidth));
 
   for(let i = 0; i < totalPellets; i++){
-    if(i >= gapStartIndex && i < gapStartIndex + gapWidth) continue; // Leave the gap open
+    if(i >= gapStartIndex && i < gapStartIndex + gapWidth) continue;
     game.bullets.push({
       x: i * pelletSpacing + pelletSpacing / 2,
       y: game.boss ? game.boss.y + game.boss.h : 20,
@@ -470,22 +470,21 @@ function bossShoot(){
   const centerX = b.x + b.w / 2, centerY = b.y + b.h / 2;
   let baseDelay = 2400 * diff.delayMult;
 
-  // --- TORIEL ---
   if(b.type === "toriel"){
     const mode = b.attackPattern % 3;
-    if(mode === 0){ // Hearthfire Spiral
+    if(mode === 0){
       for(let i = 0; i < 8; i++){
         const angle = b.spiralAngle + (i * (Math.PI * 2 / 8));
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.1 * speed, vy: Math.sin(angle) * 0.1 * speed, owner: "boss" });
       }
       b.spiralAngle += 0.3;
       baseDelay = 1200 * diff.delayMult;
-    } else if(mode === 1){ // Flame Rain
+    } else if(mode === 1){
       for(let i = 0; i < 5; i++){
         game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: 0, vy: 0.18 * speed, owner: "boss" });
       }
       baseDelay = 1800 * diff.delayMult;
-    } else { // SUMMON 2 Flame Sentinels
+    } else {
       summonBossMinions(2, "flame_sentinel");
       baseDelay = 3200 * diff.delayMult;
     }
@@ -493,10 +492,9 @@ function bossShoot(){
     if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  // --- PAPYRUS ---
   else if(b.type === "papyrus"){
     const mode = b.attackPattern % 3;
-    if(mode === 0){ // Bone Lattice Grid
+    if(mode === 0){
       const gap = Math.floor(Math.random() * 6);
       for(let i = 0; i < 8; i++){
         if(i !== gap && i !== gap + 1){
@@ -504,12 +502,12 @@ function bossShoot(){
         }
       }
       baseDelay = 2000 * diff.delayMult;
-    } else if(mode === 1){ // Bouncing Bones
+    } else if(mode === 1){
       for(let vx of [-0.12, -0.04, 0.04, 0.12]){
         game.bullets.push({ x: centerX, y: centerY, vx: vx * speed, vy: 0.16 * speed, owner: "boss" });
       }
       baseDelay = 1800 * diff.delayMult;
-    } else { // SUMMON 3 Guard Dogs
+    } else {
       summonBossMinions(3, "guard_dog");
       baseDelay = 3400 * diff.delayMult;
     }
@@ -517,22 +515,21 @@ function bossShoot(){
     if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  // --- UNDYNE ---
   else if(b.type === "undyne"){
     const mode = b.attackPattern % 3;
-    if(mode === 0){ // Spear Matrix
+    if(mode === 0){
       const offsets = [-0.08, -0.04, 0, 0.04, 0.08];
       for(const vx of offsets){
         game.bullets.push({ x: centerX, y: b.y + b.h, vx: vx * speed, vy: 0.22 * speed, owner: "undyne_spear" });
       }
       baseDelay = 1600 * diff.delayMult;
-    } else if(mode === 1){ // Spear Ring
+    } else if(mode === 1){
       for(let a = 0; a < 8; a++){
         const angle = (a / 8) * Math.PI * 2;
         game.bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 0.12 * speed, vy: Math.sin(angle) * 0.12 * speed, owner: "boss" });
       }
       baseDelay = 2200 * diff.delayMult;
-    } else { // SUMMON 4 Royal Spearsmen
+    } else {
       summonBossMinions(4, "royal_spearsman");
       baseDelay = 3600 * diff.delayMult;
     }
@@ -540,18 +537,17 @@ function bossShoot(){
     if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  // --- SANS ---
   else if(b.type === "sans"){
     const mode = b.attackPattern % 4;
-    if(mode === 0){ // White Pellet Corridor (Continuous Bone Row)
+    if(mode === 0){
       spawnPelletCorridor(speed);
       game.message = "PELLET CORRIDOR - FIND THE GAP!";
       game.messageUntil = performance.now() + 1000;
       baseDelay = 1600 * diff.delayMult;
-    } else if(mode === 1){ // Gaster Blaster Lasers
+    } else if(mode === 1){
       game.lasers.push({ x: game.playerX - 10, y: 0, w: 30, h: H, timer: 1400, warning: true });
       baseDelay = 2600 * diff.delayMult;
-    } else if(mode === 2){ // Bone Wall Burst
+    } else if(mode === 2){
       const gapIndex = Math.floor(Math.random() * 8);
       for(let i = 0; i < 10; i++){
         if(i !== gapIndex){
@@ -559,7 +555,7 @@ function bossShoot(){
         }
       }
       baseDelay = 2000 * diff.delayMult;
-    } else { // SUMMON 5 Phantom Blasters
+    } else {
       summonBossMinions(5, "phantom_blaster");
       baseDelay = 3800 * diff.delayMult;
     }
@@ -567,10 +563,9 @@ function bossShoot(){
     if(b.patternTimer > 25){ b.patternTimer = 0; b.attackPattern++; }
   }
 
-  // --- ASRIEL ---
   else if(b.type === "asriel"){
     const mode = b.attackPattern % 4;
-    if(mode === 0){ // Targeted Chaos Sabre Strike
+    if(mode === 0){
       game.sabres.push({
         targetX: game.playerX + 5,
         targetY: game.playerY + 5,
@@ -578,18 +573,18 @@ function bossShoot(){
         slashing: false
       });
       baseDelay = 2200 * diff.delayMult;
-    } else if(mode === 1){ // Starburst Cluster
+    } else if(mode === 1){
       for(let i = 0; i < 6; i++){
         game.bullets.push({ x: Math.random() * (W - 20) + 10, y: 10, vx: (Math.random() - 0.5) * 0.05, vy: 0.14 * speed, owner: "asriel_star" });
       }
       baseDelay = 1800 * diff.delayMult;
-    } else if(mode === 2){ // Dual Lasers
+    } else if(mode === 2){
       game.lasers.push(
         { x: 20, y: 0, w: 25, h: H, timer: 1200, warning: true },
         { x: W - 45, y: 0, w: 25, h: H, timer: 1200, warning: true }
       );
       baseDelay = 2600 * diff.delayMult;
-    } else { // SUMMON 6 Astral Entities
+    } else {
       summonBossMinions(6, "astral_entity");
       baseDelay = 4000 * diff.delayMult;
     }
@@ -702,7 +697,6 @@ function updateSabres(dt){
     if(s.timer < 300 && !s.slashing){
       s.slashing = true;
       sfx.hit();
-      // Execute 4-way cross blasts radiating from the slash target
       const directions = [
         { vx: 0, vy: -0.18 }, { vx: 0, vy: 0.18 },
         { vx: -0.18, vy: 0 }, { vx: 0.18, vy: 0 }
@@ -922,31 +916,54 @@ function drawEnemy(e){
     ctx.fillStyle = "#ffffff"; ctx.fillRect(x+3, y+1, 14, 13);
     ctx.fillStyle = "#ff0000"; ctx.fillRect(x+6, y+4, 3, 3); ctx.fillRect(x+11, y+4, 3, 3);
   } else if(e.type === "astral_entity"){
-    ctx.fillStyle = "#e6a1ff"; ctx.fillRect(x+2, y+2, 16, 11);
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+8, y+5, 4, 5);
+    ctx.fillStyle = "#ff00ff"; ctx.fillRect(x+2, y+2, 16, 11);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+6, y+5, 8, 5);
   } else if(e.type === "tank"){
-    ctx.fillStyle = "#8899a6"; ctx.fillRect(x+1, y, 18, 14);
-    ctx.fillStyle = "#ff6600"; ctx.fillRect(x+4, y+3, 12, 8);
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+7, y-2, 6, 4);
+    ctx.fillStyle = "#888888"; ctx.fillRect(x, y, 20, 15);
+    ctx.fillStyle = "#00ffcc"; ctx.fillRect(x+5, y+3, 10, 9);
   } else if(e.type === "flash"){
-    ctx.fillStyle = "#ff2255"; ctx.fillRect(x+2, y+2, 16, 10);
-    ctx.fillStyle = "#ffff00"; ctx.fillRect(x+8, y+8, 4, 7);
+    ctx.fillStyle = "#ffff00"; ctx.fillRect(x+2, y+2, 16, 11);
   } else if(e.type === "spread"){
-    ctx.fillStyle = "#aa00ff"; ctx.fillRect(x, y+3, 20, 8);
-    ctx.fillStyle = "#00ffff"; ctx.fillRect(x+2, y+11, 3, 4);
-    ctx.fillRect(x+8, y+11, 4, 4); ctx.fillRect(x+15, y+11, 3, 4);
+    ctx.fillStyle = "#ff5500"; ctx.fillRect(x+1, y+2, 18, 11);
   } else {
-    ctx.fillStyle="#ff647c";
-    ctx.fillRect(x+4,y,12,3); ctx.fillRect(x+2,y+3,16,8);
-    ctx.fillRect(x,y+6,4,5); ctx.fillRect(x+16,y+6,4,5);
-    ctx.fillRect(x+5,y+11,3,4); ctx.fillRect(x+12,y+11,3,4);
-    ctx.fillStyle="#050814"; ctx.fillRect(x+5,y+5,3,3); ctx.fillRect(x+12,y+5,3,3);
+    ctx.fillStyle = "#33cc55"; ctx.fillRect(x, y, 20, 15);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+4, y+4, 3, 3); ctx.fillRect(x+13, y+4, 3, 3);
+  }
+}
+
+function drawBoss(){
+  if(!game.boss) return;
+  const b = game.boss, x = b.x, y = b.y;
+
+  if(b.type === "toriel"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+12, y, 40, 34);
+    ctx.fillStyle = "#8800cc"; ctx.fillRect(x+16, y+10, 32, 20);
+    ctx.fillStyle = "#ff0000"; ctx.fillRect(x+28, y+14, 8, 8);
+  } else if(b.type === "papyrus"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+20, y, 24, 18);
+    ctx.fillStyle = "#ff3300"; ctx.fillRect(x+12, y+18, 40, 8);
+    ctx.fillStyle = "#0055ff"; ctx.fillRect(x+22, y+26, 20, 8);
+  } else if(b.type === "undyne"){
+    ctx.fillStyle = b.isImmortal ? (Math.floor(performance.now()/80)%2===0 ? "#ffffff" : "#00ffff") : "#223344";
+    ctx.fillRect(x+8, y, 48, 34);
+    ctx.fillStyle = "#ff0000"; ctx.fillRect(x+16, y+6, 12, 6); ctx.fillRect(x+40, y+6, 8, 20);
+  } else if(b.type === "sans"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x+20, y, 24, 16);
+    ctx.fillStyle = "#00aaff"; ctx.fillRect(x+12, y+16, 40, 14);
+    ctx.fillStyle = "#000000"; ctx.fillRect(x+24, y+5, 4, 4); ctx.fillRect(x+36, y+5, 4, 4);
+    ctx.fillStyle = "#00ffff"; ctx.fillRect(x+24, y+5, 2, 2);
+  } else if(b.type === "asriel"){
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(x, y, 64, 34);
+    ctx.fillStyle = "#ff00ff"; ctx.fillRect(x+12, y+8, 40, 20);
+    ctx.fillStyle = "#000000"; ctx.fillRect(x+20, y+12, 6, 6); ctx.fillRect(x+38, y+12, 6, 6);
   }
 
-  if(e.type === "tank" && e.hp < e.maxHp){
-    ctx.fillStyle="#333"; ctx.fillRect(x, y-5, 20, 2);
-    ctx.fillStyle="#00ff66"; ctx.fillRect(x, y-5, 20 * (e.hp / e.maxHp), 2);
-  }
+  // Boss HP Bar
+  const hpPercent = Math.max(0, b.hp / b.maxHp);
+  ctx.fillStyle = "#441111"; ctx.fillRect(20, 18, W - 40, 6);
+  ctx.fillStyle = b.isImmortal ? "#00ffff" : "#ff3333";
+  ctx.fillRect(20, 18, (W - 40) * hpPercent, 6);
+  ctx.strokeStyle = "#ffffff"; ctx.strokeRect(20, 18, W - 40, 6);
 }
 
 function drawLasers(){
@@ -954,7 +971,6 @@ function drawLasers(){
     if(l.warning){
       ctx.fillStyle = "rgba(255, 0, 0, 0.25)";
       ctx.fillRect(l.x, l.y, l.w, l.h);
-      text("WARNING!", l.x + l.w/2, 120, 9, "center", "#ff3355");
     } else {
       ctx.fillStyle = "#ffffff"; ctx.fillRect(l.x, l.y, l.w, l.h);
       ctx.fillStyle = "#00ffff"; ctx.fillRect(l.x + 3, l.y, l.w - 6, l.h);
@@ -965,183 +981,150 @@ function drawLasers(){
 function drawSabres(){
   for(const s of game.sabres){
     if(!s.slashing){
-      ctx.strokeStyle = "rgba(255, 0, 85, 0.6)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255, 0, 255, 0.6)"; ctx.lineWidth = 1;
       ctx.strokeRect(s.targetX - 15, s.targetY - 15, 30, 30);
-      text("⚔", s.targetX, s.targetY + 4, 12, "center", "#ff0055");
     } else {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(s.targetX - 15, s.targetY - 15, 30, 30);
-      ctx.fillStyle = "#e6a1ff";
-      ctx.fillRect(s.targetX - 10, s.targetY - 10, 20, 20);
+      ctx.fillStyle = "#ff00ff"; ctx.fillRect(s.targetX - 15, s.targetY - 15, 30, 30);
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(s.targetX - 10, s.targetY - 10, 20, 20);
     }
   }
 }
 
-function drawBullet(b){
-  if(b.owner==="undyne_spear"){
-    ctx.fillStyle = "#00ffff";
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y + 20); ctx.lineTo(b.x - 4, b.y + 6);
-    ctx.lineTo(b.x - 2, b.y + 6); ctx.lineTo(b.x - 2, b.y);
-    ctx.lineTo(b.x + 2, b.y); ctx.lineTo(b.x + 2, b.y + 6);
-    ctx.lineTo(b.x + 4, b.y + 6); ctx.closePath(); ctx.fill();
-  }else if(b.owner==="sans_pellet"){
-    ctx.fillStyle="#ffffff";
-    ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
-  }else if(b.owner==="boss"){
-    ctx.fillStyle="#ff8800";
-    ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
-  }else if(b.owner==="asriel_star"){
-    ctx.fillStyle="#ffff55";
-    ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI * 2); ctx.fill();
-  }else{
-    ctx.fillStyle=b.owner==="player" ? "#fff28a" : "#ff647c";
-    ctx.fillRect(b.x-1,b.y-5,2,7);
+function drawBullets(){
+  for(const b of game.bullets){
+    if(b.owner === "player"){
+      ctx.fillStyle = "#55ffff"; ctx.fillRect(b.x - 1, b.y - 4, 2, 6);
+    } else if(b.owner === "undyne_spear"){
+      ctx.fillStyle = "#00ffff"; ctx.fillRect(b.x - 2, b.y, 4, 12);
+    } else if(b.owner === "sans_pellet"){
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(b.x - 3, b.y - 3, 6, 6);
+    } else if(b.owner === "asriel_star"){
+      ctx.fillStyle = "#ff00ff"; ctx.fillRect(b.x - 2, b.y - 2, 5, 5);
+    } else {
+      ctx.fillStyle = "#ff4444"; ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
+    }
   }
 }
 
-function drawBoss(b){
-  if(b.type === "toriel") ctx.fillStyle = "#ffaa00";
-  else if(b.type === "papyrus") ctx.fillStyle = "#ffffff";
-  else if(b.type === "undyne") ctx.fillStyle = b.isImmortal ? "#ff0055" : "#00aaff";
-  else if(b.type === "sans") ctx.fillStyle = "#0066ff";
-  else if(b.type === "asriel") ctx.fillStyle = "#e6a1ff";
+function renderUI(){
+  text(`SCORE: ${game.score}`, 8, 12, 10, "left", "#aaa");
+  text(`LIVES: ${game.lives}`, W - 8, 12, 10, "right", "#ff5555");
+  text(`CANNONS: x${game.cannons}`, W / 2, 12, 10, "center", "#ffff55");
 
-  ctx.fillRect(b.x+8,b.y+5,b.w-16,b.h-10);
-  ctx.fillRect(b.x+16,b.y,b.w-32,5);
-  ctx.fillRect(b.x,b.y+12,10,12);
-  ctx.fillRect(b.x+b.w-10,b.y+12,10,12);
-
-  ctx.fillStyle="#000";
-  ctx.fillRect(b.x+17,b.y+11,8,7); ctx.fillRect(b.x+b.w-25,b.y+11,8,7);
-
-  if(!b.isImmortal){
-    ctx.fillStyle="#42152b"; ctx.fillRect(b.x,b.y-9,b.w,4);
-    ctx.fillStyle="#ff647c"; ctx.fillRect(b.x,b.y-9,b.w*(b.hp/b.maxHp),4);
-  } else {
-    text("IMMORTAL: " + Math.ceil(b.immortalTimer / 1000) + "s", b.x + b.w/2, b.y - 8, 10, "center");
+  if(performance.now() < game.messageUntil){
+    text(game.message, W / 2, H / 2 + 20, 12, "center", "#ffff00");
   }
 }
 
-function drawHUD(){
-  text("SCORE "+game.score,8,14,11);
-  text("LIVES "+game.lives,120,14,11,"center");
-  text("CANNONS "+game.cannons,210,14,11,"center","#ffff55");
-  text("STAGE "+game.stage,312,14,11,"right");
-  if(game.boss){
-    text("BOSS HP "+game.boss.hp+"/"+game.boss.maxHp,160,229,10,"center");
-  }else{
-    text("ENEMIES "+game.enemies.length,160,229,10,"center");
-  }
-}
-
-function overlay(title,subtitle){
-  ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
-  text(title,160,90,24,"center"); text(subtitle,160,120,12,"center");
-}
-
-function draw(){
+function renderMenu(){
   clearScreen();
+  text("FARASHOOTERS", W / 2, 55, 20, "center", "#70e8ff");
+  text("UNDERTALE BOSS EDITION", W / 2, 75, 11, "center", "#ff2255");
 
-  if(game.screen==="menu"){
-    text("FARASHOOTERS",160,45,22,"center");
-    text("UNDERTALE BOSS EDITION",160,62,10,"center");
+  text("SELECT DIFFICULTY:", W / 2, 115, 11, "center", "#aaa");
+  const diff = DIFFICULTIES[game.difficultyIdx];
+  text(`< ${diff.name} >`, W / 2, 138, 14, "center", "#ffff00");
 
-    text("SELECT DIFFICULTY:",160,95,11,"center","#9ee7ff");
+  text("PRESS SHOOT / CLICK TO START", W / 2, 185, 11, "center", "#ffffff");
+  text("USE ARROWS OR SERIAL TO NAVIGATE", W / 2, 205, 9, "center", "#60748c");
+}
 
-    DIFFICULTIES.forEach((d, i) => {
-      const selected = i === game.difficultyIdx;
-      const prefix = selected ? "► " : "  ", suffix = selected ? " ◄" : "  ";
-      const color = selected ? (i === 3 ? "#ff3355" : "#ffff55") : "#888888";
-      text(prefix + d.name + suffix, 160, 120 + i * 20, 13, "center", color);
-    });
+function renderGameOver(){
+  clearScreen();
+  text("GAME OVER", W / 2, H / 2 - 20, 22, "center", "#ff2255");
+  text(`FINAL SCORE: ${game.score}`, W / 2, H / 2 + 10, 12, "center", "#fff");
+  text("PRESS SHOOT TO RESTART", W / 2, H / 2 + 35, 10, "center", "#aaa");
+}
 
-    text("◀ / ▶ : CHANGE DIFFICULTY",160,210,9,"center");
-    text("PRESS SHOOT TO START",160,225,11,"center","#ffffff");
-  }else{
-    drawHUD();
-    drawLasers();
-    drawSabres();
-    for(const e of game.enemies) drawEnemy(e);
-    if(game.boss) drawBoss(game.boss);
-    for(const b of game.bullets) drawBullet(b);
-    drawPlayer();
+function renderWon(){
+  clearScreen();
+  text("YOU DETERMINED THE FUTURE!", W / 2, H / 2 - 20, 14, "center", "#00ffff");
+  text(`FINAL SCORE: ${game.score}`, W / 2, H / 2 + 10, 12, "center", "#fff");
+  text("PRESS SHOOT TO PLAY AGAIN", W / 2, H / 2 + 35, 10, "center", "#aaa");
+}
 
-    if(game.messageUntil>performance.now()){
-      text(game.message,160,110,15,"center");
-    }
-    if(game.screen==="gameover") overlay("GAME OVER","Press SHOOT to restart");
-    if(game.screen==="won") overlay("YOU WIN!","Press SHOOT to return to menu");
+function render(){
+  if(game.screen === "menu"){ renderMenu(); return; }
+  if(game.screen === "gameover"){ renderGameOver(); return; }
+  if(game.screen === "won"){ renderWon(); return; }
+
+  clearScreen();
+  drawLasers();
+  drawSabres();
+  drawBoss();
+  game.enemies.forEach(drawEnemy);
+  drawPlayer();
+  drawBullets();
+  renderUI();
+}
+
+function frame(now){
+  const dt = Math.min(now - game.lastTime, 50);
+  game.lastTime = now;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(frame);
+}
+
+// --- CONTROLS & LISTENERS ---
+window.addEventListener("keydown", (e) => {
+  initAudio();
+  if(e.key === "ArrowLeft" || e.key === "a" || e.key === "A"){
+    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+    else inputs.left = true;
   }
+  if(e.key === "ArrowRight" || e.key === "d" || e.key === "D"){
+    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+    else inputs.right = true;
+  }
+  if(e.key === " " || e.key === "Enter" || e.key === "z" || e.key === "Z") shoot();
+  if(e.key === "Escape") returnToMenu();
+});
+
+window.addEventListener("keyup", (e) => {
+  if(e.key === "ArrowLeft" || e.key === "a" || e.key === "A") inputs.left = false;
+  if(e.key === "ArrowRight" || e.key === "d" || e.key === "D") inputs.right = false;
+});
+
+function bindBtn(id, pressFn, releaseFn){
+  const btn = document.getElementById(id);
+  if(!btn) return;
+  const start = (e) => { e.preventDefault(); initAudio(); pressFn(); };
+  const end = (e) => { e.preventDefault(); if(releaseFn) releaseFn(); };
+  btn.addEventListener("touchstart", start);
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("touchend", end);
+  btn.addEventListener("mouseup", end);
 }
 
-function loop(now){
-  const dt=Math.min(40,now-game.lastTime);
-  game.lastTime=now;
-  update(dt); draw();
-  requestAnimationFrame(loop);
-}
+bindBtn("left", () => {
+  if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
+  else inputs.left = true;
+}, () => { inputs.left = false; });
 
-function setupTouch(btnId, key){
-  const btn = document.getElementById(btnId);
-  btn.addEventListener("pointerdown", e => { 
-    e.preventDefault(); initAudio(); 
-    if(game.screen === "menu"){
-      if(key === "left") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
-      if(key === "right") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
-    } else { inputs[key] = true; }
-  });
-  btn.addEventListener("pointerup", e => { e.preventDefault(); inputs[key] = false; });
-  btn.addEventListener("pointercancel", e => { e.preventDefault(); inputs[key] = false; });
-  btn.addEventListener("pointerleave", e => { e.preventDefault(); inputs[key] = false; });
-}
+bindBtn("right", () => {
+  if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
+  else inputs.right = true;
+}, () => { inputs.right = false; });
 
-setupTouch("left", "left");
-setupTouch("right", "right");
-document.getElementById("shoot").addEventListener("pointerdown", e => { e.preventDefault(); shoot(); });
+bindBtn("shoot", () => shoot());
+
 document.getElementById("connect").addEventListener("click", connectArduino);
 document.getElementById("disconnect").addEventListener("click", disconnectArduino);
 menuBtn.addEventListener("click", returnToMenu);
 
-fullscreenBtn.addEventListener("click", async () => {
-  initAudio();
-  const elem = document.getElementById("app");
-  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    if (elem.requestFullscreen) await elem.requestFullscreen();
-    else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
-    if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
-  } else {
-    if (document.exitFullscreen) await document.exitFullscreen();
-    else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
-    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+fullscreenBtn.addEventListener("click", () => {
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }else{
+    document.exitFullscreen().catch(()=>{});
   }
 });
 
-document.addEventListener("keydown", e => {
-  initAudio();
-  if(e.key === "Escape"){
-    returnToMenu();
-  }
-  if(e.key === "ArrowLeft"){ 
-    e.preventDefault(); 
-    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 3) % 4;
-    else inputs.left = true; 
-  }
-  if(e.key === "ArrowRight"){ 
-    e.preventDefault(); 
-    if(game.screen === "menu") game.difficultyIdx = (game.difficultyIdx + 1) % 4;
-    else inputs.right = true; 
-  }
-  if(e.key === " " || e.key === "Enter"){ e.preventDefault(); shoot(); }
-});
-
-document.addEventListener("keyup", e => {
-  if(e.key === "ArrowLeft") inputs.left = false;
-  if(e.key === "ArrowRight") inputs.right = false;
-});
-
-requestAnimationFrame(loop);
+// Start loop
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
