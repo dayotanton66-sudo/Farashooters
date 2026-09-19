@@ -156,6 +156,14 @@ function triggerShake(amt){shakeAmount=Math.max(shakeAmount,amt);}
 
 const stars=Array.from({length:35},()=>({x:Math.floor(Math.random()*W),y:Math.floor(Math.random()*H),s:Math.random()>.5?1:2}));
 
+const BOSS_TYPES=[
+  {name:'WARLORD',color:'#ff00ea',accent:'#00f3ff',w:40,h:18,fireInterval:180,hpMult:1},
+  {name:'PHANTOM',color:'#a100ff',accent:'#ff00ea',w:32,h:16,fireInterval:140,hpMult:1.2},
+  {name:'BEHEMOTH',color:'#ff5500',accent:'#ffff00',w:48,h:22,fireInterval:220,hpMult:1.8},
+  {name:'SPECTRE',color:'#00ffcc',accent:'#a100ff',w:36,h:16,fireInterval:120,hpMult:1.4},
+  {name:'OVERLORD',color:'#ff0055',accent:'#00f3ff',w:44,h:20,fireInterval:100,hpMult:2.2}
+];
+
 const game={
   screen:'menu',
   overlayOption:0,
@@ -166,14 +174,7 @@ const game={
   invaderDir:1,invaderStepTimer:0,invaderStepInterval:500,invaderFrame:0,
   stageClearTimer:0,invulnerableUntil:0,
   message:'',messageUntil:0,boss:null,bossShootTimer:0,
-  // Undertale Boss Mechanics Mechanics
-  bossPhase:'turn_menu', // 'turn_menu', 'enemy_attack', 'dialogue'
-  bossMenuOpt:0, // 0: FIGHT, 1: ACT, 2: ITEM, 3: MERCY
-  bossMercyReady:false,
-  bossTurnTimer:0,
-  bossPattern:0,
-  bossDialogueText:'',
-  bossDialogueUntil:0
+  bossPatternAngle:0,bossPatternStep:0,bossesDefeated:0
 };
 
 function setStatus(t){statusEl.textContent=t}
@@ -195,7 +196,7 @@ function resetGame(){
   game.lives=DIFF[game.difficultyIdx].lives;
   game.bombs=2;game.stage=1;game.cannons=1;game.shield=false;
   game.playerX=W/2-6;game.playerY=H-14;
-  game.lastShoot=0;
+  game.lastShoot=0;game.bossesDefeated=0;
   game.bullets=[];game.enemies=[];game.particles=[];game.texts=[];game.drops=[];game.bunkers=[];
   game.stageClearTimer=0;game.invulnerableUntil=0;game.boss=null;
   game.message='STAGE 1';game.messageUntil=performance.now()+1000;
@@ -241,71 +242,60 @@ function spawnStage(){
   game.enemies=[];game.bullets=[];game.boss=null;game.invaderDir=1;
   stopMusic();
   setStatus('STAGE '+game.stage);
-  const rows=Math.min(3+Math.floor((game.stage-1)/2),5),cols=8,gapX=20,gapY=12,startX=(W-(cols-1)*gapX)/2-6;
+  
+  // Scaling unit density and rows after each boss clear
+  const baseRows=3+Math.floor((game.stage-1)/2);
+  const bossBonusRows=Math.min(3, game.bossesDefeated);
+  const rows=Math.min(6, baseRows+bossBonusRows);
+  const cols=Math.min(10, 8+Math.floor(game.bossesDefeated/2));
+  const gapX=18,gapY=11,startX=(W-(cols-1)*gapX)/2-6;
+  
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-    let type=r===0?'top':r<3?'middle':'bottom';
-    game.enemies.push({x:Math.floor(startX+c*gapX),y:20+r*gapY,w:12,h:8,type,hp:1,alive:true});
+    let type='bottom';
+    if(r===0) type='top';
+    else if(r<3||(r<4&&game.bossesDefeated>1)) type='middle';
+    
+    // Units become tougher as boss defeats increase
+    let hp=1;
+    if(type==='top'&&game.bossesDefeated>=2) hp=2;
+    if(type==='middle'&&game.bossesDefeated>=4) hp=2;
+
+    game.enemies.push({x:Math.floor(startX+c*gapX),y:18+r*gapY,w:12,h:8,type,hp,alive:true});
   }
-  game.invaderStepInterval=Math.max(100,500-game.stage*25);
+  game.invaderStepInterval=Math.max(60,500-game.stage*25-game.bossesDefeated*30);
 }
 
 function spawnBoss(){
   game.enemies=[];game.bullets=[];
-  const hp=150+game.stage*30;
-  game.boss={type:'space_dreadnought',title:'BOSS',x:W/2-20,y:20,w:40,h:18,hp,maxHp:hp,dir:1,speed:.06*DIFF[game.difficultyIdx].speed};
+  const typeIdx=game.bossesDefeated%BOSS_TYPES.length;
+  const bossData=BOSS_TYPES[typeIdx];
+  const hp=Math.floor((150+game.stage*30)*bossData.hpMult);
+
+  game.boss={
+    typeIdx,
+    title:bossData.name,
+    color:bossData.color,
+    accent:bossData.accent,
+    x:W/2-bossData.w/2,y:20,
+    w:bossData.w,h:bossData.h,
+    hp,maxHp:hp,
+    dir:1,
+    speed:.06*DIFF[game.difficultyIdx].speed,
+    fireInterval:bossData.fireInterval
+  };
+
   game.bossShootTimer=0;
-  game.bossPhase='turn_menu';
-  game.bossMenuOpt=0;
-  game.bossMercyReady=false;
-  game.message='WARNING: BOSS';
+  game.bossPatternAngle=0;
+  game.bossPatternStep=0;
+  game.message='WARNING: '+bossData.name;
   game.messageUntil=performance.now()+1500;
   playBossMusic();
-}
-
-function startBossAttackPhase(){
-  game.bossPhase='enemy_attack';
-  game.bossTurnTimer=performance.now()+4000;
-  game.bossPattern=(game.bossPattern+1)%3;
-  game.bullets=[];
-}
-
-function triggerUndertaleAction(){
-  if(!game.boss) return;
-  if(game.bossPhase==='turn_menu'){
-    if(game.bossMenuOpt===0){ // FIGHT
-      game.boss.hp=Math.max(0, game.boss.hp-30);
-      sfx.hit();
-      addFloatingText('-30', game.boss.x+game.boss.w/2, game.boss.y, '#ff00ea');
-      if(game.boss.hp<=0){
-        defeatBoss();
-        return;
-      }
-      startBossAttackPhase();
-    }else if(game.bossMenuOpt===1){ // ACT
-      game.bossDialogueText='YOU COMMUNICATED WITH THE DREADNOUGHT...';
-      game.bossDialogueUntil=performance.now()+1500;
-      game.bossPhase='dialogue';
-      game.bossMercyReady=true;
-    }else if(game.bossMenuOpt===2){ // ITEM
-      game.lives=Math.min(5, game.lives+1);
-      sfx.clear();
-      addFloatingText('+1 LIFE', game.playerX, game.playerY, '#00f3ff');
-      startBossAttackPhase();
-    }else if(game.bossMenuOpt===3){ // MERCY
-      if(game.bossMercyReady){
-        defeatBoss();
-      }else{
-        game.bossDialogueText='BOSS IS NOT READY TO BE SPARED!';
-        game.bossDialogueUntil=performance.now()+1200;
-        game.bossPhase='dialogue';
-      }
-    }
-  }
 }
 
 function defeatBoss(){
   game.boss=null;stopMusic();sfx.clear();
   game.bullets=[];
+  game.bossesDefeated++;
   game.stageClearTimer=performance.now()+1200;
 }
 
@@ -323,11 +313,7 @@ function handleAction(){
     if(game.overlayOption===0) resetGame();
     else returnToMenu();
   }else if(game.screen==='playing'){
-    if(game.boss && game.bossPhase==='turn_menu'){
-      triggerUndertaleAction();
-    }else{
-      shoot();
-    }
+    shoot();
   }
 }
 
@@ -353,8 +339,6 @@ function handleLeft(){
     game.difficultyIdx=(game.difficultyIdx+2)%3;
   }else if(game.screen==='gameover'||game.screen==='won'||game.screen==='paused'){
     game.overlayOption=0;
-  }else if(game.boss && game.bossPhase==='turn_menu'){
-    game.bossMenuOpt=(game.bossMenuOpt+3)%4;
   }else{
     inputs.left=true;inputs.right=false;
   }
@@ -366,8 +350,6 @@ function handleRight(){
     game.difficultyIdx=(game.difficultyIdx+1)%3;
   }else if(game.screen==='gameover'||game.screen==='won'||game.screen==='paused'){
     game.overlayOption=1;
-  }else if(game.boss && game.bossPhase==='turn_menu'){
-    game.bossMenuOpt=(game.bossMenuOpt+1)%4;
   }else{
     inputs.right=true;inputs.left=false;
   }
@@ -422,7 +404,7 @@ function updateInvaders(dt){
   if(!alive.length||game.boss)return;
 
   game.invaderStepTimer+=dt;
-  const currentInterval=Math.max(50,game.invaderStepInterval*(alive.length/24));
+  const currentInterval=Math.max(40,game.invaderStepInterval*(alive.length/24));
 
   if(game.invaderStepTimer>=currentInterval){
     game.invaderStepTimer=0;
@@ -444,7 +426,7 @@ function updateInvaders(dt){
       else e.x+=game.invaderDir*4;
     });
 
-    if(Math.random()<.5){
+    if(Math.random()<(0.4+game.bossesDefeated*0.1)){
       const shooter=alive[Math.floor(Math.random()*alive.length)];
       game.bullets.push({x:shooter.x+shooter.w/2,y:shooter.y+shooter.h,vx:0,vy:.1*DIFF[game.difficultyIdx].speed,owner:'invader'});
     }
@@ -456,36 +438,42 @@ function updateBoss(dt){
   b.x+=b.dir*b.speed*dt;
   if(b.x<=4){b.x=4;b.dir=1}else if(b.x+b.w>=W-4){b.x=W-4-b.w;b.dir=-1}
 
-  if(game.bossPhase==='dialogue'){
-    if(performance.now()>=game.bossDialogueUntil){
-      startBossAttackPhase();
-    }
-    return;
-  }
+  game.bossShootTimer+=dt;
+  if(game.bossShootTimer>=b.fireInterval){
+    game.bossShootTimer=0;
+    const cx=b.x+b.w/2,cy=b.y+b.h;
+    
+    // Undertale Pattern Selection based on Boss Type & Phase
+    const patternType = (b.typeIdx + game.bossPatternStep) % 3;
+    game.bossPatternStep++;
 
-  if(game.bossPhase==='enemy_attack'){
-    if(performance.now()>=game.bossTurnTimer){
-      game.bossPhase='turn_menu';
-      game.bullets=[];
-      return;
-    }
-
-    game.bossShootTimer+=dt;
-    if(game.bossShootTimer>=400){
-      game.bossShootTimer=0;
-      const cx=b.x+b.w/2,cy=b.y+b.h;
-      
-      // Undertale-inspired Pattern Spawns
-      if(game.bossPattern===0){ // Ring Pattern
-        for(let a=0;a<Math.PI*2;a+=Math.PI/4){
-          game.bullets.push({x:cx,y:cy,vx:Math.cos(a)*0.08,vy:Math.sin(a)*0.08+0.05,owner:'boss'});
-        }
-      }else if(game.bossPattern===1){ // Target Wave
-        const angle=Math.atan2(game.playerY-cy, game.playerX-cx);
-        game.bullets.push({x:cx,y:cy,vx:Math.cos(angle)*0.12,vy:Math.sin(angle)*0.12,owner:'boss'});
-      }else{ // Screen Sweep
-        const sweepX=Math.random()*W;
-        game.bullets.push({x:sweepX,y:10,vx:0,vy:0.1,owner:'boss'});
+    if(patternType === 0){
+      // Pattern 1: Rotating Ring Pattern
+      const count = 8;
+      for(let i=0; i<count; i++){
+        const angle = game.bossPatternAngle + (i * (Math.PI * 2 / count));
+        const vx = Math.cos(angle) * 0.08;
+        const vy = Math.sin(angle) * 0.08 + 0.04;
+        game.bullets.push({x:cx, y:cy, vx, vy, owner:'boss'});
+      }
+      game.bossPatternAngle += 0.2;
+    }else if(patternType === 1){
+      // Pattern 2: Target Aimed Spiral Wave
+      const angle = Math.atan2(game.playerY - cy, game.playerX - cx);
+      for(let spread = -0.3; spread <= 0.3; spread += 0.3){
+        const finalAngle = angle + spread;
+        const vx = Math.cos(finalAngle) * 0.12;
+        const vy = Math.sin(finalAngle) * 0.12;
+        game.bullets.push({x:cx, y:cy, vx, vy, owner:'boss'});
+      }
+    }else if(patternType === 2){
+      // Pattern 3: Rain Wave Sweep across Screen
+      const numBullets = 4;
+      for(let i=0; i<numBullets; i++){
+        const sweepX = (cx - 40) + Math.random() * 80;
+        const vx = (Math.random() - 0.5) * 0.04;
+        const vy = 0.09 + Math.random() * 0.04;
+        game.bullets.push({x:Math.max(4, Math.min(W-4, sweepX)), y:cy, vx, vy, owner:'boss'});
       }
     }
   }
@@ -651,27 +639,6 @@ function drawModal(title,sub,opt1,opt2){
   text(opt2,175,125,8,'center',b2Sel?'#ff00ea':'#00f3ff');
 }
 
-function drawUndertaleBossUI(){
-  if(!game.boss) return;
-  
-  if(game.bossPhase==='turn_menu'){
-    ctx.strokeStyle='#00f3ff';ctx.lineWidth=1;
-    ctx.strokeRect(20, H-45, W-40, 25);
-    
-    const opts=['FIGHT','ACT','ITEM','MERCY'];
-    opts.forEach((o,i)=>{
-      const isSel=game.bossMenuOpt===i;
-      const color=isSel?'#ff00ea':'#00f3ff';
-      const colColor=(i===3&&game.bossMercyReady)?'#ffff00':color;
-      text((isSel?'>':'')+o, 30+i*70, H-28, 8, 'left', colColor);
-    });
-  }else if(game.bossPhase==='dialogue'){
-    ctx.strokeStyle='#00f3ff';ctx.lineWidth=1;
-    ctx.strokeRect(20, H-45, W-40, 25);
-    text(game.bossDialogueText, W/2, H-28, 7, 'center', '#ff00ea');
-  }
-}
-
 function draw(){
   ctx.save();
   if(shakeAmount>0){
@@ -725,20 +692,18 @@ function draw(){
     if(!e.alive)continue;
     const f=game.invaderFrame;
     const spr=e.type==='top'?SPRITES.invaderTop[f]:SPRITES.invaderMid[f];
-    drawPixelSprite(e.x,e.y,spr,e.type==='top'?'#ff00ea':'#00f3ff',1.2);
+    drawPixelSprite(e.x,e.y,spr,e.hp>1?'#ffff00':(e.type==='top'?'#ff00ea':'#00f3ff'),1.2);
   }
 
-  // Exact Boss Appearance Preserved
+  // Exact UI and Visual Preserved with Boss Type Colors
   if(game.boss){
     const b=game.boss;
-    ctx.fillStyle='#ff00ea';
+    ctx.fillStyle=b.color;
     ctx.fillRect(b.x,b.y,b.w,b.h);
-    ctx.fillStyle='#00f3ff';
+    ctx.fillStyle=b.accent;
     ctx.fillRect(b.x+4,b.y+4,8,4);ctx.fillRect(b.x+b.w-12,b.y+4,8,4);
     ctx.fillStyle='#ff00ea';
     ctx.fillRect(40,14,Math.max(0,240*(b.hp/b.maxHp)),2);
-    
-    drawUndertaleBossUI();
   }
 
   if(performance.now()>=game.invulnerableUntil||Math.floor(performance.now()/60)%2===0){
